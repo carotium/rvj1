@@ -27,7 +27,7 @@ package rvj1_pkg;
         OPCODE_STOREFP = 7'b0100111,
         OPCODE_CUSTOM1 = 7'b0101011,
         OPCODE_AMO     = 7'b0101111,
-        OPCODE_OP      = 7'b0110011,
+        OPCODE_OP      = 7'b0110011,  // also mul opcode
         OPCODE_LUI     = 7'b0110111,
         OPCODE_OP32    = 7'b0111011,
         OPCODE_MADD    = 7'b1000011,
@@ -56,6 +56,19 @@ package rvj1_pkg;
         ALU_OP_AND  = 4'b0111
     } alu_op_e;
 
+    // MUL defines
+    parameter int MUL_OP_WIDTH = 3;
+    typedef enum logic [MUL_OP_WIDTH-1:0] {
+	MUL_OP_MUL        = 3'b000,
+	MUL_OP_MULH       = 3'b001,
+	MUL_OP_MULHSU     = 3'b010,
+	MUL_OP_MULHU      = 3'b011,
+	MUL_OP_DIV        = 3'b100,
+	MUL_OP_DIVU       = 3'b101,
+	MUL_OP_REM        = 3'b110,
+	MUL_OP_REMU       = 3'b111
+    } mul_op_e;
+
     // funct3 defines
     typedef enum logic [2:0] {
         F3_ADDI       = 3'b000,
@@ -68,10 +81,28 @@ package rvj1_pkg;
         F3_SRLI_SRAI  = 3'b101
     } f3_imm_e;
 
+    // funct3 mul defines
+    typedef enum logic [2:0] {
+	F3_MUL        = 3'b000,
+	F3_MULH       = 3'b001,
+	F3_MULHSU     = 3'b010,
+	F3_MULHU      = 3'b011,
+	F3_DIV        = 3'b100,
+	F3_DIVU       = 3'b101,
+	F3_REM        = 3'b110,
+	F3_REMU       = 3'b111
+    } f3_mul_e;
+
+    // funct7 defines
     typedef enum logic [6:0] {
-        F7_SLLI_SRLI_ADDI = 7'b0000_000,
-        F7_SRAI_SUB       = 7'b0100_000
+        F7_SLLI_SRLI_ADDI   = 7'b0000_000,
+        F7_SRAI_SUB         = 7'b0100_000
     } f7_shift_imm_e;
+
+    // funt7 mul defines
+    typedef enum logic [6:0] {
+	F7_MUL_DIV_REM      = 7'b0000_001
+    } f7_mul_e;
 
     // Load-Store Unit
     typedef enum logic [3:0] {
@@ -154,7 +185,7 @@ package rvj1_pkg;
         | (0 << 5)   // F - Single precision floats
         | (0 << 7)   // H - Hypervison extension
         | (1 << 8)   // I - RV32I/64I base ISA
-        | (0 << 12)  // M - Integer Multiply/Divide extension
+        | (1 << 12)  // M - Integer Multiply/Divide extension
         | (0 << 16)  // Q - Quad-precison floats
         | (0 << 18)  // S - Supervison mode implemented
         | (0 << 20)  // U - User mode implemented

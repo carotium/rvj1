@@ -39,6 +39,7 @@ module rvj1_dec import rvj1_pkg::*;
   output logic [RALEN-1:0] rf_addr_a_o,
   output logic [RALEN-1:0] rf_addr_b_o,
   output alu_op_e          alu_sel_o,    // Select operation ALU should perform.
+  output mul_op_e	   mul_sel_o,
   output logic             rpa_or_pc_o,
   output logic             rpb_or_imm_o,
   output logic             alu_write_rf_o,
@@ -71,6 +72,7 @@ logic [RALEN-1:0] rf_addr_a;
 logic [RALEN-1:0] rf_addr_b;
 logic [RALEN-1:0] regdest2; // should be zero when regdest not present
 alu_op_e          alu_sel;
+mul_op_e	  mul_sel;
 logic             rpa_or_pc;
 logic             rpb_or_imm;
 logic             alu_write_rf;
@@ -210,6 +212,7 @@ function automatic logic f3_f7_valid_opimm(input logic [2:0] f3, input logic [6:
   return valid;
 endfunction
 
+// add support for mul
 function automatic logic f3_f7_valid_op(input logic [2:0] f3, input logic [6:0] f7);
   logic valid = 1'b0;
   if (f3 == 3'b000 || f3 == 3'b101)
@@ -334,6 +337,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
+    mul_sel_o		<= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -362,6 +366,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
+    mul_sel_o		<= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -390,6 +395,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= rf_addr_a;
     rf_addr_b_o         <= rf_addr_b;
     alu_sel_o           <= alu_sel;
+    mul_sel_o		<= mul_sel;
     rpa_or_pc_o         <= rpa_or_pc;
     rpb_or_imm_o        <= rpb_or_imm;
     alu_write_rf_o      <= alu_write_rf;
@@ -425,6 +431,7 @@ begin
   rf_addr_a         = 5'b00000;
   rf_addr_b         = 5'b00000;
   alu_sel           = ALU_OP_ADD;
+  mul_sel	    = MUL_OP_MUL;
   rpa_or_pc         = 1'b0;
   rpb_or_imm        = 1'b0;
   alu_write_rf      = 1'b0;
