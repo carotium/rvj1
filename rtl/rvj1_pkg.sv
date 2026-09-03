@@ -42,32 +42,27 @@ package rvj1_pkg;
     } opcode_e;
 
     // ALU defines
-    parameter int ALU_OP_WIDTH = 4;
+    parameter int ALU_OP_WIDTH = 5;
     typedef enum logic [ALU_OP_WIDTH-1:0] {
-        ALU_OP_ADD  = 4'b0000,
-        ALU_OP_SUB  = 4'b1000,
-        ALU_OP_SLL  = 4'b0001,
-        ALU_OP_SLT  = 4'b0010,
-        ALU_OP_SLTU = 4'b0011,
-        ALU_OP_XOR  = 4'b0100,
-        ALU_OP_SRL  = 4'b0101,
-        ALU_OP_SRA  = 4'b1101,
-        ALU_OP_OR   = 4'b0110,
-        ALU_OP_AND  = 4'b0111
+        ALU_OP_ADD    = 5'b00000,
+        ALU_OP_SUB    = 5'b01000,
+        ALU_OP_SLL    = 5'b00001,
+        ALU_OP_SLT    = 5'b00010,
+        ALU_OP_SLTU   = 5'b00011,
+        ALU_OP_XOR    = 5'b00100,
+        ALU_OP_SRL    = 5'b00101,
+        ALU_OP_SRA    = 5'b01101,
+        ALU_OP_OR     = 5'b00110,
+        ALU_OP_AND    = 5'b00111,
+        ALU_OP_MUL    = 5'b10000
+        ALU_OP_MULH   = 5'b10001
+       	ALU_OP_MULHSU = 5'b10010
+       	ALU_OP_MULHU  = 5'b10011
+       	ALU_OP_DIV    = 5'b10100
+       	ALU_OP_DIVU   = 5'b10101
+       	ALU_OP_REM    = 5'b10110
+       	ALU_OP_REMU   = 5'b10111
     } alu_op_e;
-
-    // MUL defines
-    parameter int MUL_OP_WIDTH = 3;
-    typedef enum logic [MUL_OP_WIDTH-1:0] {
-	MUL_OP_MUL        = 3'b000,
-	MUL_OP_MULH       = 3'b001,
-	MUL_OP_MULHSU     = 3'b010,
-	MUL_OP_MULHU      = 3'b011,
-	MUL_OP_DIV        = 3'b100,
-	MUL_OP_DIVU       = 3'b101,
-	MUL_OP_REM        = 3'b110,
-	MUL_OP_REMU       = 3'b111
-    } mul_op_e;
 
     // funct3 defines
     typedef enum logic [2:0] {
