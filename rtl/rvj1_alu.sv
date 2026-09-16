@@ -30,8 +30,6 @@ module rvj1_alu import rvj1_pkg::*; (
   /*******************************
   * MULTIPLICATION CIRCUIT
   *******************************/
-  logic [(XLEN*2)-1:0] mul_res;
-  assign mul_res = 64'(op_a_i) * 64'(op_b_i);
 
   /*******************************
   * RESULT MUXING
@@ -49,8 +47,8 @@ module rvj1_alu import rvj1_pkg::*; (
       ALU_OP_SLL:  res_o = op_a_i << op_b_i[4:0];
       ALU_OP_SRL:  res_o = op_a_i >> op_b_i[4:0];
       ALU_OP_SRA:  res_o = $signed(op_a_i) >>> op_b_i[4:0];
-      ALU_OP_MUL:  res_o = mul_res[XLEN-1:0];
-      ALU_OP_MULH: res_o = mul_res[(XLEN*2)-1:XLEN];
+      ALU_OP_MUL:  res_o = {64'(op_a_i) * 64'(op_b_i)}[XLEN-1:0];
+      ALU_OP_MULH: res_o = {64'(op_a_i) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
     endcase
   end
 
