@@ -44,7 +44,15 @@ from riscvmodel.insn import (
     InstructionCSRRCI,
     InstructionNOP,
     InstructionECALL,
-    InstructionMRET
+    InstructionMRET,
+    InstructionMUL,
+    InstructionMULH,
+    InstructionMULHSU,
+    InstructionMULHU,
+    InstructionDIV,
+    InstructionDIVU,
+    InstructionREM,
+    InstructionREMU
 )
 from riscvmodel.regnames import x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x28, x29, x30, x31
 from riscvmodel.csrnames import misa, mscratch, mtvec, mepc, mcause, mstatus, mtval
@@ -92,7 +100,6 @@ class LUITest(Program):
     def expects(self) -> dict:
         return {x1: 0, x2: 0x00001000, x3: 0x80000000, x4: 0xfffff000}
 
-
 class AUIPCTest(Program):
     """Basic test of AUIPC instruction"""
 
@@ -115,7 +122,6 @@ class AUIPCTest(Program):
             x4: (0x8000_0000 + 0xC + 0xffff_f000) & 0xFFFF_FFFF
         }
 
-
 class ADDITest(Program):
     """Basic test of ADDI instruction"""
 
@@ -131,6 +137,37 @@ class ADDITest(Program):
     def expects(self) -> dict:
         return {x1: 2, x2: 1}
 
+class MULTest(Program):
+    """Basic test of MUL instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, x0), # x1=0
+            InstructionADDI(x1, x0, 7),  # x1=7
+            InstructionADDI(x2, x0, 8),  # x2=8
+            InstructionMUL(x2, x2, x1),  # x2=7*8=56
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: 56}
+
+class MULHTest(Program):
+    """Basic test of MULH instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionLUI(x1, 0x80000),
+            InstructionADDI(x2, x0, 8),  # x2 = 2
+            InstructionMULH(x2, x1, x2), # x2=2147483648*2 (33-bit number)
+                                         # write only higher half of 64-bit number
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: 4}
 
 class SLTITest(Program):
     """Basic test of SLTI instruction"""
@@ -1329,11 +1366,12 @@ class InsnAccFaultPreciseTest(Program):
     def expects(self) -> dict:
         return {x1: 1, x2: 2, x3: 3, x4: 5, x5: 1}
 
-
 RV32I_TESTS = {
     "lui": LUITest(),
     "auipc": AUIPCTest(),
     "addi": ADDITest(),
+    "mul": MULTest(),
+    "mulh": MULHTest(),
     "slti": SLTITest(),
     "sltiu": SLTIUTest(),
     "xori": XORITest(),
