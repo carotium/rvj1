@@ -54,13 +54,13 @@ package rvj1_pkg;
         ALU_OP_SRA    = 5'b01101,
         ALU_OP_OR     = 5'b00110,
         ALU_OP_AND    = 5'b00111,
-        ALU_OP_MUL    = 5'b10000
-        ALU_OP_MULH   = 5'b10001
-       	ALU_OP_MULHSU = 5'b10010
-       	ALU_OP_MULHU  = 5'b10011
-       	ALU_OP_DIV    = 5'b10100
-       	ALU_OP_DIVU   = 5'b10101
-       	ALU_OP_REM    = 5'b10110
+        ALU_OP_MUL    = 5'b10000,
+        ALU_OP_MULH   = 5'b10001,
+       	ALU_OP_MULHSU = 5'b10010,
+       	ALU_OP_MULHU  = 5'b10011,
+       	ALU_OP_DIV    = 5'b10100,
+       	ALU_OP_DIVU   = 5'b10101,
+       	ALU_OP_REM    = 5'b10110,
        	ALU_OP_REMU   = 5'b10111
     } alu_op_e;
 
