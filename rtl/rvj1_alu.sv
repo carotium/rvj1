@@ -37,18 +37,24 @@ module rvj1_alu import rvj1_pkg::*; (
   always_comb begin
     res_o = 32'b0;
     unique case (sel_i)
-      ALU_OP_ADD:  res_o = op_a_i +  op_b_i;
-      ALU_OP_SUB:  res_o = op_a_i -  op_b_i;
-      ALU_OP_XOR:  res_o = op_a_i ^  op_b_i;
-      ALU_OP_OR:   res_o = op_a_i |  op_b_i;
-      ALU_OP_AND:  res_o = op_a_i &  op_b_i;
-      ALU_OP_SLT:  res_o = lts_res; //(op_a_i, op_b_i);
-      ALU_OP_SLTU: res_o = ltu_res;
-      ALU_OP_SLL:  res_o = op_a_i << op_b_i[4:0];
-      ALU_OP_SRL:  res_o = op_a_i >> op_b_i[4:0];
-      ALU_OP_SRA:  res_o = $signed(op_a_i) >>> op_b_i[4:0];
-      ALU_OP_MUL:  res_o = {64'(op_a_i) * 64'(op_b_i)}[XLEN-1:0];
-      ALU_OP_MULH: res_o = {64'(op_a_i) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      ALU_OP_ADD:    res_o = op_a_i +  op_b_i;
+      ALU_OP_SUB:    res_o = op_a_i -  op_b_i;
+      ALU_OP_XOR:    res_o = op_a_i ^  op_b_i;
+      ALU_OP_OR:     res_o = op_a_i |  op_b_i;
+      ALU_OP_AND:    res_o = op_a_i &  op_b_i;
+      ALU_OP_SLT:    res_o = lts_res; //(op_a_i, op_b_i);
+      ALU_OP_SLTU:   res_o = ltu_res;
+      ALU_OP_SLL:    res_o = op_a_i << op_b_i[4:0];
+      ALU_OP_SRL:    res_o = op_a_i >> op_b_i[4:0];
+      ALU_OP_SRA:    res_o = $signed(op_a_i) >>> op_b_i[4:0];
+      ALU_OP_MUL:    res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[XLEN-1:0];
+      ALU_OP_MULH:   res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[(XLEN*2)-1:XLEN];
+      ALU_OP_MULHSU: res_o = {64'($signed(op_a_i)) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      ALU_OP_MULHU:  res_o = {64'(op_a_i) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      ALU_OP_DIV:    res_o = $signed(op_a_i) / $signed(op_b_i);
+      ALU_OP_DIVU:   res_o = op_a_i / op_b_i;
+      ALU_OP_REM:    res_o = $signed(op_a_i) % $signed(op_b_i);
+      ALU_OP_REMU:   res_o = op_a_i % op_b_i;
     endcase
   end
 
