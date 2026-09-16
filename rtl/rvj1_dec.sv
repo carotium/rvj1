@@ -39,7 +39,6 @@ module rvj1_dec import rvj1_pkg::*;
   output logic [RALEN-1:0] rf_addr_a_o,
   output logic [RALEN-1:0] rf_addr_b_o,
   output alu_op_e          alu_sel_o,    // Select operation ALU should perform.
-  output mul_op_e	   mul_sel_o,
   output logic             rpa_or_pc_o,
   output logic             rpb_or_imm_o,
   output logic             alu_write_rf_o,
@@ -72,7 +71,6 @@ logic [RALEN-1:0] rf_addr_a;
 logic [RALEN-1:0] rf_addr_b;
 logic [RALEN-1:0] regdest2; // should be zero when regdest not present
 alu_op_e          alu_sel;
-mul_op_e	  mul_sel;
 logic             rpa_or_pc;
 logic             rpb_or_imm;
 logic             alu_write_rf;
@@ -189,6 +187,29 @@ function automatic alu_op_e f3_7_to_alu_rr_op(
   return op;
 endfunction
 
+function automatic alu_op_e f3_7_to_mul_rr_op(
+  input f3_mul_e f3, input f7_mul_e f7, output logic error
+);
+  alu_op_e op = ALU_OP_MUL;
+  error = 1'b0;
+  unique case (f7)
+    F7_MUL_DIV_REM: begin
+      unique case (f3)
+        F3_MUL:    op = ALU_OP_MUL;
+	F3_MULH:   op = ALU_OP_MULH;
+	F3_MULHSU: op = ALU_OP_MULHSU;
+	F3_MULHU:  op = ALU_OP_MULHU;
+	F3_DIV:    op = ALU_OP_DIV;
+	F3_DIVU:   op = ALU_OP_DIVU;
+	F3_REM:    op = ALU_OP_REM;
+	F3_REMU:   op = ALU_OP_REMU;
+      endcase
+    end
+    default: error = 1'b1;
+  endcase
+  return op;
+endfunction
+
 function automatic lsu_ctrl_e f3_to_lsu_ctrl(input logic [2:0] f3, input logic is_write);
   return lsu_ctrl_e'({is_write, f3});
 endfunction
@@ -219,6 +240,13 @@ function automatic logic f3_f7_valid_op(input logic [2:0] f3, input logic [6:0] 
     valid = (f7 == 7'b000_0000 || f7  == 7'b010_0000);
   else
     valid = (f7 == 7'b000_0000);
+  return valid;
+endfunction
+
+function automatic logic f3_f7_valid_op_mul(input logic [2:0] f3, input logic [6:0] f7);
+  logic valid = 1'b0;
+  if (f7 == 7'b000_0001)
+    valid = 1'b1;
   return valid;
 endfunction
 
@@ -337,7 +365,6 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
-    mul_sel_o		<= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -366,7 +393,6 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
-    mul_sel_o		<= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -395,7 +421,6 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= rf_addr_a;
     rf_addr_b_o         <= rf_addr_b;
     alu_sel_o           <= alu_sel;
-    mul_sel_o		<= mul_sel;
     rpa_or_pc_o         <= rpa_or_pc;
     rpb_or_imm_o        <= rpb_or_imm;
     alu_write_rf_o      <= alu_write_rf;
@@ -431,7 +456,6 @@ begin
   rf_addr_a         = 5'b00000;
   rf_addr_b         = 5'b00000;
   alu_sel           = ALU_OP_ADD;
-  mul_sel	    = MUL_OP_MUL;
   rpa_or_pc         = 1'b0;
   rpb_or_imm        = 1'b0;
   alu_write_rf      = 1'b0;
@@ -473,6 +497,12 @@ begin
         alu_sel      = f3_7_to_alu_rr_op(f3_imm_e'(funct3), f7_shift_imm_e'(funct7), illegal_instr);
         alu_write_rf = 1'b1;
         regdest2     = regdest;
+      end else if (f3_f7_valid_op_mul(funct3, funct7)) begin
+	rf_addr_a    = regs1;
+	rf_addr_b    = regs2;
+	alu_sel      = f3_7_to_mul_rr_op(f3_imm_e'(funct3), f7_shift_imm_e'(funct7), illegal_instr);
+	alu_write_rf = 1'b1;
+	regdest2     = regdest;
       end else begin
         illegal_instr = 1'b1;
       end
