@@ -137,38 +137,6 @@ class ADDITest(Program):
     def expects(self) -> dict:
         return {x1: 2, x2: 1}
 
-class MULTest(Program):
-    """Basic test of MUL instruction"""
-
-    def __init__(self):
-        insns = [
-            InstructionADDI(x1, x0, x0), # x1=0
-            InstructionADDI(x1, x0, 7),  # x1=7
-            InstructionADDI(x2, x0, 8),  # x2=8
-            InstructionMUL(x2, x2, x1),  # x2=7*8=56
-            InstructionADDI(x31, x0, 1)
-        ]
-        super().__init__(insns)
-
-    def expects(self) -> dict:
-        return {x2: 56}
-
-class MULHTest(Program):
-    """Basic test of MULH instruction"""
-
-    def __init__(self):
-        insns = [
-            InstructionLUI(x1, 0x80000),
-            InstructionADDI(x2, x0, 8),  # x2 = 2
-            InstructionMULH(x2, x1, x2), # x2=2147483648*2 (33-bit number)
-                                         # write only higher half of 64-bit number
-            InstructionADDI(x31, x0, 1)
-        ]
-        super().__init__(insns)
-
-    def expects(self) -> dict:
-        return {x2: 4}
-
 class SLTITest(Program):
     """Basic test of SLTI instruction"""
 
@@ -1366,12 +1334,133 @@ class InsnAccFaultPreciseTest(Program):
     def expects(self) -> dict:
         return {x1: 1, x2: 2, x3: 3, x4: 5, x5: 1}
 
+class MULTest(Program):
+    """Basic test of MUL instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, x0), # x1=0
+            InstructionADDI(x1, x0, -7),  # x1=7
+            InstructionADDI(x2, x0, 8),  # x2=8
+            InstructionMUL(x2, x2, x1),  # x2=7*8=56
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: -56}
+
+class MULHTest(Program):
+    """Basic test of MULH instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionLUI(x1, 0x40000),
+            InstructionADDI(x2, x0, -16),  # x2 = 2
+            InstructionMULH(x2, x1, x2), # x2=2147483648*2 (33-bit number)
+                                         # write only higher half of 64-bit number
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: -4}
+
+class MULHSUTest(Program):
+    """Basic test of MULHSU instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionLUI(x1, 0x80000),
+            InstructionADDI(x2, x0, 8),
+            InstructionMULHSU(x2, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: -4}
+
+class MULHUTest(Program):
+    """Basic test of MULHU instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionLUI(x1, 0x80000),
+            InstructionADDI(x2, x0, 2),
+            InstructionMULHU(x2, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x2: 1}
+
+class DIVTest(Program):
+    """Basic test of DIV instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, 9),
+            InstructionADDI(x2, x0, -3),
+            InstructionDIV(x1, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x1: -3}
+
+class DIVUTest(Program):
+    """Basic test of DIVU instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, 10),
+            InstructionADDI(x2, x0, 2),
+            InstructionDIV(x1, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x1: 5}
+
+class REMTest(Program):
+    """Basic test of REM instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, -13),
+            InstructionADDI(x2, x0, 4),
+            InstructionREM(x1, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x1: -1}
+
+class REMUTest(Program):
+    """Basic test of REMU instruction"""
+
+    def __init__(self):
+        insns = [
+            InstructionADDI(x1, x0, 13),
+            InstructionADDI(x2, x0, 4),
+            InstructionREM(x1, x1, x2),
+            InstructionADDI(x31, x0, 1)
+        ]
+        super().__init__(insns)
+
+    def expects(self) -> dict:
+        return {x1: 1}
+
+
 RV32I_TESTS = {
     "lui": LUITest(),
     "auipc": AUIPCTest(),
     "addi": ADDITest(),
-    "mul": MULTest(),
-    "mulh": MULHTest(),
     "slti": SLTITest(),
     "sltiu": SLTIUTest(),
     "xori": XORITest(),
@@ -1417,4 +1506,12 @@ RV32I_TESTS = {
     "misaligned-jal": MISALIGNEDJALTest(),
     "csr-write-fault": CSRWriteFaultTest(),
     "precise-insn-acc-fault": InsnAccFaultPreciseTest(),
+    "mul": MULTest(),
+    "mulh": MULHTest(),
+    "mulhsu": MULHSUTest(),
+    "mulhu": MULHUTest(),
+    "div": DIVTest(),
+    "divu": DIVUTest(),
+    "rem": REMTest(),
+    "remu": REMUTest(),
 }
