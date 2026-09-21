@@ -30,6 +30,13 @@ module rvj1_alu import rvj1_pkg::*; (
   /*******************************
   * MULTIPLICATION CIRCUIT
   *******************************/
+  logic [XLEN*2-1:0] mul_res;
+  rvj1_mul multiplier (
+    .op_a_i(op_a_i),
+    .op_b_i(op_b_i),
+    .mul_op(sel_i),
+    .res_o(mul_res)
+  );
 
   /*******************************
   * RESULT MUXING
@@ -47,10 +54,14 @@ module rvj1_alu import rvj1_pkg::*; (
       ALU_OP_SLL:    res_o = op_a_i << op_b_i[4:0];
       ALU_OP_SRL:    res_o = op_a_i >> op_b_i[4:0];
       ALU_OP_SRA:    res_o = $signed(op_a_i) >>> op_b_i[4:0];
-      ALU_OP_MUL:    res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[XLEN-1:0];
-      ALU_OP_MULH:   res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[(XLEN*2)-1:XLEN];
-      ALU_OP_MULHSU: res_o = {64'($signed(op_a_i)) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
-      ALU_OP_MULHU:  res_o = {64'(op_a_i) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      //ALU_OP_MUL:    res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[XLEN-1:0];
+      ALU_OP_MUL:    res_o = mul_res[XLEN-1:0];
+      //ALU_OP_MULH:   res_o = {64'($signed(op_a_i)) * 64'($signed(op_b_i))}[(XLEN*2)-1:XLEN];
+      ALU_OP_MULH:   res_o = mul_res[XLEN*2-1:XLEN];
+      //ALU_OP_MULHSU: res_o = {64'($signed(op_a_i)) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      ALU_OP_MULHSU: res_o = mul_res[XLEN*2-1:XLEN];
+      //ALU_OP_MULHU:  res_o = {64'(op_a_i) * 64'(op_b_i)}[(XLEN*2)-1:XLEN];
+      ALU_OP_MULHU:  res_o = mul_res[XLEN*2-1:XLEN];
       ALU_OP_DIV:    res_o = $signed(op_a_i) / $signed(op_b_i);
       ALU_OP_DIVU:   res_o = op_a_i / op_b_i;
       ALU_OP_REM:    res_o = $signed(op_a_i) % $signed(op_b_i);
