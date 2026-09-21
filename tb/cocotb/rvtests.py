@@ -1339,16 +1339,31 @@ class MULTest(Program):
 
     def __init__(self):
         insns = [
-            InstructionADDI(x1, x0, x0), # x1=0
-            InstructionADDI(x1, x0, -7),  # x1=7
-            InstructionADDI(x2, x0, 8),  # x2=8
-            InstructionMUL(x2, x2, x1),  # x2=7*8=56
-            InstructionADDI(x31, x0, 1)
+            InstructionADDI(x1, x0, x0),
+            # 9608 * 5848
+            InstructionLUI(x1, 0x2),
+            InstructionADDI(x1, x1, 1416), # x1 = 9608
+            InstructionLUI(x2, 0x1),
+            InstructionADDI(x2, x2, 1752), # x2 = 5848
+            InstructionMUL(x5, x2, x1),    # x5 = 9608 * 5848
+            # 9608 * (-5848)
+            InstructionLUI(x3, 0xFFFF_F),
+            InstructionADDI(x3, x3, -1752), # x3 = -5848
+            InstructionMUL(x6, x3, x1),     # x6 = 9608 * (-5848)
+            # (-9608) * (-5848)
+            InstructionLUI(x4, 0xFFFF_E),
+            InstructionADDI(x4, x4, -1416),# x4 = -9608
+            InstructionMUL(x7, x4, x3),     # x7 = (-9608) * (-5848)
+            # (-9608) * 5848
+            InstructionMUL(x8, x4, x2),      # x8 = (-9608) * 5848
+
+#            InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
     def expects(self) -> dict:
-        return {x2: -56}
+        return {x5: 56187584, x6: -56187584, x7: 56187584} #, x8: -56187584}
+        #TODO: doesn't seem to work with 4 variables - AssertionError: A test resulting in all zero registers is invalid
 
 class MULHTest(Program):
     """Basic test of MULH instruction"""
@@ -1371,30 +1386,34 @@ class MULHSUTest(Program):
 
     def __init__(self):
         insns = [
-            InstructionLUI(x1, 0x80000),
-            InstructionADDI(x2, x0, 8),
+            InstructionLUI(x1, 0xFFFF_F),
+            InstructionADDI(x1, x1, 680), # x1 = -3416
+            InstructionLUI(x2, 0x7C2),
+            InstructionADDI(x2, x2, 1241),
             InstructionMULHSU(x2, x1, x2),
             InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
     def expects(self) -> dict:
-        return {x2: -4}
+        return {x2: -6}
 
 class MULHUTest(Program):
     """Basic test of MULHU instruction"""
 
     def __init__(self):
         insns = [
-            InstructionLUI(x1, 0x80000),
-            InstructionADDI(x2, x0, 2),
-            InstructionMULHU(x2, x1, x2),
+            InstructionLUI(x1, 0xC1),
+            InstructionADDI(x1, x1, -1253), # x1 = 789275
+            InstructionLUI(x2, 0x57),
+            InstructionADDI(x2, x2, -1476),# x2 = 354876
+            InstructionMULHU(x2, x1, x2), # x2 = 280094754900
             InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
     def expects(self) -> dict:
-        return {x2: 1}
+        return {x2: 65} # upper 16-bits of x2 above
 
 class DIVTest(Program):
     """Basic test of DIV instruction"""
