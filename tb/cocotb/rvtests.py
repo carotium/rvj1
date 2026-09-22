@@ -1389,14 +1389,14 @@ class MULHSUTest(Program):
             InstructionLUI(x1, 0xFFFF_F),
             InstructionADDI(x1, x1, 680), # x1 = -3416
             InstructionLUI(x2, 0x7C2),
-            InstructionADDI(x2, x2, 1241),
+            InstructionADDI(x2, x2, 1241),# x2 = 8135897
             InstructionMULHSU(x2, x1, x2),
             InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
     def expects(self) -> dict:
-        return {x2: -6}
+        return {x2: -7}
 
 class MULHUTest(Program):
     """Basic test of MULHU instruction"""
