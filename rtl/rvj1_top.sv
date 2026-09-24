@@ -267,6 +267,7 @@ module rvj1_top import rvj1_pkg::*; #(
   assign alu_op_b_data = rpb_or_imm ? immediate       : regs2_data;
 
   rvj1_alu alu_inst(
+    .clk_i  (clk_i),
     .sel_i  (alu_op_sel),
     .op_a_i (alu_op_a_data),
     .op_b_i (alu_op_b_data),
