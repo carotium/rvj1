@@ -13,6 +13,7 @@
 
 /* verilator lint_off IMPORTSTAR */
 module rvj1_alu import rvj1_pkg::*; (
+    input  logic             clk_i,
     input  alu_op_e sel_i,  // select arithmetic operation
     input  logic [XLEN-1:0]  op_a_i,
     input  logic [XLEN-1:0]  op_b_i,
@@ -36,6 +37,15 @@ module rvj1_alu import rvj1_pkg::*; (
     .op_b_i(op_b_i),
     .mul_op(sel_i),
     .res_o(mul_res)
+  );
+
+  logic [XLEN-1:0] div_res;
+  rvj1_div divider (
+    .clk_i(clk_i),
+    .op_a_i(op_a_i),
+    .op_b_i(op_b_i),
+    .div_op(sel_i),
+    .res_o(div_res)
   );
 
   /*******************************
