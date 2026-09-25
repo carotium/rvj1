@@ -1,4 +1,7 @@
 .PHONY: all debug program sim clean
+
+SHELL = bash
+
 all: ./output/impl.bit
 sim: ./output/tb.vcd
 REPORTS = ./output/post_synth_power.rpt \
@@ -16,11 +19,14 @@ MODULES   = $(SVFILES:.sv=)
 debug:
 	vivado -mode batch -source synth.tcl -log ./output/vivado.log -nojournal -tclargs DEBUG
 
-$(REPORTS) $(NETLISTS) $(BITFILES): $(SVFILES) synth.tcl constr.xdc ./output/
-	vivado -mode batch -source synth.tcl -log ./output/vivado.log -nojournal
+$(REPORTS) $(NETLISTS) $(BITFILES): $(SVFILES) synth.tcl constr.xdc ./output/ sources_vivado.tcl
+	LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1 vivado -mode batch -source synth.tcl -log ./output/vivado.log -nojournal
 
 ./output/:
 	mkdir output
+
+sources_vivado.tcl:
+	bender script vivado -t fpga &> sources_vivado.tcl
 
 program: 
 	vivado -mode batch -source prog.tcl
@@ -41,3 +47,4 @@ clean:
 	rm -f xelab.pb
 	rm -f *simsnap.wdb
 	rm -f xsim*.jou vivado*.log vivado*.jou
+	rm -f sources_vivado.tcl
