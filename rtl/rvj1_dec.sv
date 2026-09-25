@@ -233,7 +233,6 @@ function automatic logic f3_f7_valid_opimm(input logic [2:0] f3, input logic [6:
   return valid;
 endfunction
 
-// add support for mul
 function automatic logic f3_f7_valid_op(input logic [2:0] f3, input logic [6:0] f7);
   logic valid = 1'b0;
   if (f3 == 3'b000 || f3 == 3'b101)
