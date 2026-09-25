@@ -27,11 +27,17 @@ module booth_core #(parameter int XLEN = 32) (
       // 0*Q  = 0
       // -1*Q = NOT(M)
       // -2*Q = NOT(M << 1)
-      assign pps[i][XLEN*2-1:2*i] = (ones[i] & signs[i]) ? ~op_a_2XLEN_sign_ext        :
-	                            (twos[i] & signs[i]) ? ~(op_a_2XLEN_sign_ext << 1) :
-		                    (ones[i])            ? op_a_2XLEN_sign_ext         :
-		                    (twos[i])            ? (op_a_2XLEN_sign_ext << 1)  :
-		                                           'b0;
+
+      always_comb begin
+        pps[i] = '0;
+
+        pps[i][XLEN*2-1:2*i] = (ones[i] & signs[i]) ? (~op_a_2XLEN_sign_ext)        :
+	                       (twos[i] & signs[i]) ? (~(op_a_2XLEN_sign_ext << 1)) :
+		               (ones[i])            ? (op_a_2XLEN_sign_ext)         :
+		               (twos[i])            ? ((op_a_2XLEN_sign_ext << 1))  :
+		                                      'b0;
+      end
+
       // Negative correction for -1*Q and -2*Q at
       assign pps[i+1][2*i] = (signs[i] & (ones[i] | twos[i]) & (i < 15)) ? 1'b1 : 1'b0;
     end 
