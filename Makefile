@@ -14,6 +14,10 @@ CUID := $(shell id -u)
 CGID := $(shell id -g)
 CWD  := $(abspath $(dir $$PWD))
 
+BENDER     ?= bender
+VERILATOR  ?= verilator
+DOCKER_ADD_XILINX_PATH := $(if $(XILINX_DIR), -v $(XILINX_DIR):$(XILINX_DIR),)
+
 all: lint-verilator test vivado doc
 
 doc:
@@ -55,4 +59,4 @@ docker-run-it:
 			   -v ~/.cache/:/headless/.cache:rw \
 			   -v ~/.ssh/:$(CWD)/../.ssh/:ro \
 			   -v $(CWD):/foss/designs/rvj1 \
-			    iic-osic-tools-plus:0.1 -s /bin/bash
+			    $(DOCKER_ADD_XILINX_PATH) iic-osic-tools-plus:0.1 -s /bin/bash
