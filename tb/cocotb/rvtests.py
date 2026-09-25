@@ -1357,6 +1357,9 @@ class MULTest(Program):
             # (-9608) * 5848
             InstructionMUL(x8, x4, x2),      # x8 = (-9608) * 5848
 
+            InstructionLUI(x10, 0x7FFF_F),
+            InstructionADDI(x10, x10, 0x7FF),
+            InstructionMUL(x10, x10, x10),
 #            InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
