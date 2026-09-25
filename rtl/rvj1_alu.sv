@@ -13,7 +13,6 @@
 
 /* verilator lint_off IMPORTSTAR */
 module rvj1_alu import rvj1_pkg::*; (
-    input  logic             clk_i,
     input  alu_op_e sel_i,  // select arithmetic operation
     input  logic [XLEN-1:0]  op_a_i,
     input  logic [XLEN-1:0]  op_b_i,
