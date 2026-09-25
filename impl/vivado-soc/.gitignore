@@ -1,2 +1,3 @@
 output/
 sources_vivado.tcl
+tight_setup_hold_pins.txt
