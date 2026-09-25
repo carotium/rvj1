@@ -500,7 +500,7 @@ begin
       end else if (f3_f7_valid_op_mul(funct3, funct7)) begin
 	rf_addr_a    = regs1;
 	rf_addr_b    = regs2;
-	alu_sel      = f3_7_to_mul_rr_op(f3_imm_e'(funct3), f7_shift_imm_e'(funct7), illegal_instr);
+	alu_sel      = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	alu_write_rf = 1'b1;
 	regdest2     = regdest;
       end else begin

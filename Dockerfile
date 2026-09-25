@@ -6,6 +6,10 @@ RUN apt update && \
                    boolector \
                    netcat-openbsd
 
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.3_amd64.deb && \
+    sudo apt install ./libtinfo5_6.3-2ubuntu0.3_amd64.deb && \
+    rm ./libtinfo5_6.3-2ubuntu0.3_amd64.deb
+
 RUN useradd -m -u 1000 developer
 USER developer
 

@@ -39,14 +39,14 @@ module rvj1_alu import rvj1_pkg::*; (
     .res_o(mul_res)
   );
 
-  logic [XLEN-1:0] div_res;
-  rvj1_div divider (
-    .clk_i(clk_i),
-    .op_a_i(op_a_i),
-    .op_b_i(op_b_i),
-    .div_op(sel_i),
-    .res_o(div_res)
-  );
+//  logic [XLEN-1:0] div_res;
+//  rvj1_div divider (
+//    .clk_i(clk_i),
+//    .op_a_i(op_a_i),
+//    .op_b_i(op_b_i),
+//    .div_op(sel_i),
+//    .res_o(div_res)
+//  );
 
   /*******************************
   * RESULT MUXING
