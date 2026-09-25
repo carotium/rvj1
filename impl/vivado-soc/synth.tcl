@@ -14,11 +14,11 @@ set source_dir $project_root_dir/rtl
 set output_dir $script_path/output/.
 
 source ${script_path}/sources_vivado.tcl
-#read_verilog rvj1_soc.sv
+read_verilog rvj1_soc.sv
 read_xdc $script_path/constr_nexys.xdc
 
 # Run synthesis
-synth_design -top rvj1_top -include_dirs $source_dir/inc
+synth_design -top rvj1_soc
 report_timing_summary    -file ./output/post_synth_timing_summary.rpt
 report_utilization -hierarchical -file ./output/post_synth_utilization.rpt
 report_power             -file ./output/post_synth_power.rpt
