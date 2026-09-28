@@ -89,9 +89,11 @@ module rvj1_top import rvj1_pkg::*; #(
   logic [RALEN-1:0] rf_addr_a;
   logic [RALEN-1:0] rf_addr_b;
   alu_op_e          alu_op_sel;
+  mul_op_e          mul_op_sel;
   logic             rpa_or_pc;
   logic             rpb_or_imm;
   logic             alu_write_rf;
+  logic             mul_write_rf;
   logic [RALEN-1:0] regdest;
   logic [XLEN-1:0]  immediate;
   logic             lsu_ctrl_valid;
@@ -118,17 +120,20 @@ module rvj1_top import rvj1_pkg::*; #(
   logic [XLEN-1:0]  alu_op_a_data;
   logic [XLEN-1:0]  alu_op_b_data;
   logic [XLEN-1:0]  alu_res;
+  logic [XLEN-1:0]  mul_res;
   logic [XLEN-1:0]  pc;
   logic             stall_ex;
   logic             stall_mem_wb;
 
   // MEM - WB
   logic             alu_write_rf_r;
+  logic             mul_write_rf_r;
   logic [RALEN-1:0] regdest_r;
   logic             lsu_ctrl_valid_r;
   lsu_ctrl_e        lsu_ctrl_r;
   logic [XLEN-1:0]  regs2_data_r;
   logic [XLEN-1:0]  alu_res_r;
+  logic [XLEN-1:0]  mul_res_r;
   logic             jump_r;
   logic             csr_valid_r;
   logic [11:0]      csr_addr_r;
@@ -229,9 +234,11 @@ module rvj1_top import rvj1_pkg::*; #(
     .rf_addr_a_o         (rf_addr_a),
     .rf_addr_b_o         (rf_addr_b),
     .alu_sel_o           (alu_op_sel),
+    .mul_sel_o           (mul_op_sel),
     .rpa_or_pc_o         (rpa_or_pc),
     .rpb_or_imm_o        (rpb_or_imm),
     .alu_write_rf_o      (alu_write_rf),
+    .mul_write_rf_o      (mul_write_rf),
     .regdest_o           (regdest),
     .immediate_o         (immediate),
     .lsu_ctrl_valid_o    (lsu_ctrl_valid),
@@ -273,18 +280,25 @@ module rvj1_top import rvj1_pkg::*; #(
     .res_o  (alu_res)
   );
 
+  rvj1_mul_div mul_inst(
+    .sel_i  (mul_op_sel),
+    .op_a_i (alu_op_a_data),
+    .op_b_i (alu_op_b_data),
+    .res_o  (mul_res)
+  );
+
   register_wclear #(
-    .DTYPE  (logic [(RALEN + XLEN + XLEN + 1 + $bits(lsu_ctrl_e) + $bits(branch_ctrl_e) + 1  + 1 + 1 + 1 + 12 + $bits(csr_cmd_t))-1:0]),
+    .DTYPE  (logic [(RALEN + XLEN + XLEN + XLEN + 1 + $bits(lsu_ctrl_e) + $bits(branch_ctrl_e) + 1  + 1 + 1 + 1 + 1 + 12 + $bits(csr_cmd_t))-1:0]),
     .RESET_VALUE (0)
   ) ex_mem_wb_stage_reg(
     .clk  (clk_i),
     .rstn (rstn_i),
     .clear(flush_mem_wb),
     .ce   (control && ~stall_mem_wb),
-    .in   ({regdest,   alu_res,   regs2_data,   lsu_ctrl_valid & ~stall_ex,   lsu_ctrl, ctrl_branch_type,
-            alu_write_rf & ~stall_ex,   jump & ~stall_ex,   csr_valid & ~stall_ex, ctrl_branch & ~stall_ex,  csr_addr,   csr_cmd}),
-    .out  ({regdest_r, alu_res_r, regs2_data_r, lsu_ctrl_valid_r,             lsu_ctrl_r, ctrl_branch_type_r,
-            alu_write_rf_r,              jump_r,            csr_valid_r,           ctrl_branch_r,  csr_addr_r, csr_cmd_r})
+    .in   ({regdest,   alu_res, mul_res,   regs2_data,   lsu_ctrl_valid & ~stall_ex,   lsu_ctrl, ctrl_branch_type,
+            alu_write_rf & ~stall_ex, mul_write_rf & ~stall_ex,  jump & ~stall_ex,   csr_valid & ~stall_ex, ctrl_branch & ~stall_ex,  csr_addr,   csr_cmd}),
+    .out  ({regdest_r, alu_res_r, mul_res_r, regs2_data_r, lsu_ctrl_valid_r,             lsu_ctrl_r, ctrl_branch_type_r,
+            alu_write_rf_r, mul_write_rf_r,             jump_r,            csr_valid_r,           ctrl_branch_r,  csr_addr_r, csr_cmd_r})
   );
 
 
@@ -336,20 +350,24 @@ module rvj1_top import rvj1_pkg::*; #(
   always_comb begin
     wpc_addr = '0;
     wpc_data = '0;
-    unique case ({jump_r, lsu_wb_valid, alu_write_rf_r, csr_wb})
-      4'b1000: begin // jump_r - one cycle after execute
+    unique case ({jump_r, lsu_wb_valid, alu_write_rf_r, mul_write_rf_r, csr_wb})
+      5'b10000: begin // jump_r - one cycle after execute
         wpc_addr = regdest_r;
         wpc_data = pc;
       end
-      4'b0100: begin // lsu_wb_valid - ctrl logic stalls execution path
+      5'b01000: begin // lsu_wb_valid - ctrl logic stalls execution path
         wpc_addr = lsu_wb_regdest;
         wpc_data = lsu_wb_data;
       end
-      4'b0010: begin // alu_write_rf_r - one cycle after execute
+      5'b00100: begin // alu_write_rf_r - one cycle after execute
         wpc_addr = regdest_r;
         wpc_data = alu_res_r;
       end
-      4'b0001: begin // csr_wb - two cycles after execute (thats why csr insns takes 3 cycles)
+      5'b00010: begin // mul_write_rf_r - one cycle after execute
+        wpc_addr = regdest_r;
+	wpc_data = mul_res_r;
+      end
+      5'b00001: begin // csr_wb - two cycles after execute (thats why csr insns takes 3 cycles)
         wpc_addr = csr_regdest;
         wpc_data = csr_value;
       end
@@ -361,12 +379,13 @@ module rvj1_top import rvj1_pkg::*; #(
   end
   assign wpc_we = (lsu_wb_valid ||
                   (alu_write_rf_r  && ~stall_mem_wb) ||
+		  (mul_write_rf_r  && ~stall_mem_wb) ||
                   (jump_r) ||
                    csr_wb) && ~stop_write;
 
   `ifdef ASSERTIONS
     always_ff @(posedge clk_i)
-      one_hot_writeback: assert( $onehot0({jump_r, lsu_wb_valid, alu_write_rf_r, csr_wb}) );
+      one_hot_writeback: assert( $onehot0({jump_r, lsu_wb_valid, alu_write_rf_r, mul_write_rf_r, csr_wb}) );
   `endif
 
   /*********************************************
