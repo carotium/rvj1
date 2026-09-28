@@ -20,6 +20,7 @@ read_xdc $script_path/constr_nexys.xdc
 # Run synthesis
 synth_design -top rvj1_soc
 report_timing_summary    -file ./output/post_synth_timing_summary.rpt
+report_timing -max_paths 10
 report_utilization -hierarchical -file ./output/post_synth_utilization.rpt
 report_power             -file ./output/post_synth_power.rpt
 report_clock_interaction -file ./output/post_synth_clock_interaction.rpt -delay_type min_max
