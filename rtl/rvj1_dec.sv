@@ -39,9 +39,11 @@ module rvj1_dec import rvj1_pkg::*;
   output logic [RALEN-1:0] rf_addr_a_o,
   output logic [RALEN-1:0] rf_addr_b_o,
   output alu_op_e          alu_sel_o,    // Select operation ALU should perform.
+  output mul_op_e          mul_sel_o,    // Select operation MUL should perform.
   output logic             rpa_or_pc_o,
   output logic             rpb_or_imm_o,
   output logic             alu_write_rf_o,
+  output logic             mul_write_rf_o,
   output logic [RALEN-1:0] regdest_o,
   output logic [XLEN-1:0]  immediate_o,  // Sign extended immediate.
   output logic             lsu_ctrl_valid_o,
@@ -71,9 +73,11 @@ logic [RALEN-1:0] rf_addr_a;
 logic [RALEN-1:0] rf_addr_b;
 logic [RALEN-1:0] regdest2; // should be zero when regdest not present
 alu_op_e          alu_sel;
+mul_op_e          mul_sel;
 logic             rpa_or_pc;
 logic             rpb_or_imm;
 logic             alu_write_rf;
+logic             mul_write_rf;
 logic [XLEN-1:0]  immediate;
 logic             lsu_ctrl_valid;
 lsu_ctrl_e        lsu_ctrl;
@@ -187,22 +191,22 @@ function automatic alu_op_e f3_7_to_alu_rr_op(
   return op;
 endfunction
 
-function automatic alu_op_e f3_7_to_mul_rr_op(
+function automatic mul_op_e f3_7_to_mul_rr_op(
   input f3_mul_e f3, input f7_mul_e f7, output logic error
 );
-  alu_op_e op = ALU_OP_MUL;
+  mul_op_e op = MUL_OP_MUL;
   error = 1'b0;
   unique case (f7)
     F7_MUL_DIV_REM: begin
       unique case (f3)
-        F3_MUL:    op = ALU_OP_MUL;
-	F3_MULH:   op = ALU_OP_MULH;
-	F3_MULHSU: op = ALU_OP_MULHSU;
-	F3_MULHU:  op = ALU_OP_MULHU;
-	F3_DIV:    op = ALU_OP_DIV;
-	F3_DIVU:   op = ALU_OP_DIVU;
-	F3_REM:    op = ALU_OP_REM;
-	F3_REMU:   op = ALU_OP_REMU;
+        F3_MUL:    op = MUL_OP_MUL;
+	F3_MULH:   op = MUL_OP_MULH;
+	F3_MULHSU: op = MUL_OP_MULHSU;
+	F3_MULHU:  op = MUL_OP_MULHU;
+	F3_DIV:    op = MUL_OP_DIV;
+	F3_DIVU:   op = MUL_OP_DIVU;
+	F3_REM:    op = MUL_OP_REM;
+	F3_REMU:   op = MUL_OP_REMU;
       endcase
     end
     default: error = 1'b1;
@@ -364,9 +368,11 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
+    mul_sel_o           <= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
+    mul_write_rf_o      <= 1'b0;
     regdest_o           <= 5'b00000;
     immediate_o         <= 32'h0000_0000;
     lsu_ctrl_valid_o    <= 1'b0;
@@ -392,9 +398,11 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= 5'b00000;
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
+    mul_sel_o           <= MUL_OP_MUL;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
+    mul_write_rf_o      <= 1'b0;
     regdest_o           <= 5'b00000;
     immediate_o         <= 32'h0000_0000;
     lsu_ctrl_valid_o    <= 1'b0;
@@ -420,9 +428,11 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_a_o         <= rf_addr_a;
     rf_addr_b_o         <= rf_addr_b;
     alu_sel_o           <= alu_sel;
+    mul_sel_o           <= mul_sel;
     rpa_or_pc_o         <= rpa_or_pc;
     rpb_or_imm_o        <= rpb_or_imm;
     alu_write_rf_o      <= alu_write_rf;
+    mul_write_rf_o      <= mul_write_rf;
     regdest_o           <= regdest2;
     immediate_o         <= immediate;
     lsu_ctrl_valid_o    <= lsu_ctrl_valid;
@@ -455,9 +465,11 @@ begin
   rf_addr_a         = 5'b00000;
   rf_addr_b         = 5'b00000;
   alu_sel           = ALU_OP_ADD;
+  mul_sel           = MUL_OP_MUL;
   rpa_or_pc         = 1'b0;
   rpb_or_imm        = 1'b0;
   alu_write_rf      = 1'b0;
+  mul_write_rf      = 1'b0;
   immediate         = 32'h0000_0000;
   lsu_ctrl_valid    = 1'b0;
   lsu_ctrl          = LSU_NO_CMD;
@@ -499,8 +511,8 @@ begin
       end else if (f3_f7_valid_op_mul(funct3, funct7)) begin
 	rf_addr_a    = regs1;
 	rf_addr_b    = regs2;
-	alu_sel      = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	alu_write_rf = 1'b1;
+	mul_sel      = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	mul_write_rf = 1'b1;
 	regdest2     = regdest;
       end else begin
         illegal_instr = 1'b1;
