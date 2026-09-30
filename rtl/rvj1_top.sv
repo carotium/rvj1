@@ -121,6 +121,7 @@ module rvj1_top import rvj1_pkg::*; #(
   logic [XLEN-1:0]  alu_op_b_data;
   logic [XLEN-1:0]  alu_res;
   logic [XLEN-1:0]  mul_res;
+  logic             mul_div_en;
   logic [XLEN-1:0]  pc;
   logic             stall_ex;
   logic             stall_mem_wb;
@@ -235,6 +236,7 @@ module rvj1_top import rvj1_pkg::*; #(
     .rf_addr_b_o         (rf_addr_b),
     .alu_sel_o           (alu_op_sel),
     .mul_sel_o           (mul_op_sel),
+    .mul_div_en_o        (mul_div_en),
     .rpa_or_pc_o         (rpa_or_pc),
     .rpb_or_imm_o        (rpb_or_imm),
     .alu_write_rf_o      (alu_write_rf),
@@ -281,9 +283,12 @@ module rvj1_top import rvj1_pkg::*; #(
   );
 
   rvj1_mul_div mul_inst(
+    .clk_i  (clk_i),
+    .rstn_i (rstn_i),
     .sel_i  (mul_op_sel),
-    .op_a_i (alu_op_a_data),
-    .op_b_i (alu_op_b_data),
+    .op_a_i (regs1_data), // There are no immediate MUL insns.
+    .op_b_i (regs2_data),
+    .mul_div_en_i (mul_div_en),
     .res_o  (mul_res)
   );
 
