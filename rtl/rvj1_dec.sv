@@ -40,6 +40,7 @@ module rvj1_dec import rvj1_pkg::*;
   output logic [RALEN-1:0] rf_addr_b_o,
   output alu_op_e          alu_sel_o,    // Select operation ALU should perform.
   output mul_op_e          mul_sel_o,    // Select operation MUL should perform.
+  output logic             mul_div_en_o,
   output logic             rpa_or_pc_o,
   output logic             rpb_or_imm_o,
   output logic             alu_write_rf_o,
@@ -74,6 +75,7 @@ logic [RALEN-1:0] rf_addr_b;
 logic [RALEN-1:0] regdest2; // should be zero when regdest not present
 alu_op_e          alu_sel;
 mul_op_e          mul_sel;
+logic             mul_div_en;
 logic             rpa_or_pc;
 logic             rpb_or_imm;
 logic             alu_write_rf;
@@ -101,8 +103,8 @@ logic [XLEN-1:0] imm_u_type;
 logic [XLEN-1:0] imm_j_type;
 
 typedef enum logic [1:0] {
-  eDEC_FIRST_CYCLE,
-  eDEC_SECOND_CYCLE
+  eDEC_ISSUE_CYCLE,
+  eDEC_STALL_CYCLE
 } dec_fsm_e;
 dec_fsm_e state, state_next;
 
@@ -119,6 +121,21 @@ logic [19:15] regs1;
 logic [24:20] regs2;
 logic [31:25] funct7;
 logic [11:0]  csr_addr;
+
+// Counter instantiation for controller number of cycles for MUL, DIV opcode
+// execution
+logic is_mul;
+logic [XLEN-1:0] dec_counter;
+logic clear_dec_counter; // Active HIGH clear
+cntr #(
+  .WORD_WIDTH (XLEN),
+  .RESET_VALUE(0)
+) dec_cycle_cnt (
+  .clk  (clk_i),
+  .rstn (rstn_i || ~clear_dec_counter),
+  .ce   (state == eDEC_STALL_CYCLE),
+  .count(dec_counter)
+);
 
 /*************************************
 * Helper functions
@@ -320,7 +337,7 @@ endfunction
 /*************************************
 * INSN PARTS and IMMEDIATES
 *************************************/
-assign instr    = (state == eDEC_FIRST_CYCLE) ? ifu_instr_i : instr_buff;
+assign instr    = (state == eDEC_ISSUE_CYCLE) ? ifu_instr_i : instr_buff;
 assign opcode   = instr[6:0];
 assign regdest  = instr[11:7];
 assign imm11_0  = instr[31:20]; // I-type immediate
@@ -343,8 +360,8 @@ assign imm_j_type  = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'
 * Instruction issuing
 *************************************/
 assign ifu_fire      = ifu_ready_o && ifu_valid_i;
-assign ifu_ready_o   = ~stall_i && ~(state != eDEC_FIRST_CYCLE) && ~illegal_instr_o;
-assign update_output = ifu_fire ||  (state != eDEC_FIRST_CYCLE && ~stall_i);
+assign ifu_ready_o   = ~stall_i && ~(state != eDEC_ISSUE_CYCLE) && ~illegal_instr_o;
+assign update_output = ifu_fire ||  (state != eDEC_ISSUE_CYCLE && ~stall_i);
 assign reset_output  = clear || (~update_output && ~stall_i);
 register #(
   .DTYPE(logic [31:0])
@@ -369,6 +386,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
     mul_sel_o           <= MUL_OP_MUL;
+    mul_div_en_o        <= 1'b0;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -380,7 +398,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     ctrl_jump_o         <= 1'b0;
     ctrl_branch_o       <= 1'b0;
     ctrl_branch_type_o  <= BRANCH_EQ;
-    state               <= eDEC_FIRST_CYCLE;
+    state               <= eDEC_ISSUE_CYCLE;
     instr_issued_o      <= 1'b0;
     instr_will_retire_o <= 1'b0;
     control_o           <= 1'b0;
@@ -399,6 +417,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_b_o         <= 5'b00000;
     alu_sel_o           <= ALU_OP_ADD;
     mul_sel_o           <= MUL_OP_MUL;
+    mul_div_en_o        <= 1'b0;
     rpa_or_pc_o         <= 1'b0;
     rpb_or_imm_o        <= 1'b0;
     alu_write_rf_o      <= 1'b0;
@@ -410,7 +429,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     ctrl_jump_o         <= 1'b0;
     ctrl_branch_o       <= 1'b0;
     ctrl_branch_type_o  <= BRANCH_EQ;
-    state               <= eDEC_FIRST_CYCLE;
+    state               <= eDEC_ISSUE_CYCLE;
     instr_issued_o      <= 1'b0;
     instr_will_retire_o <= 1'b0;
     control_o           <= 1'b0;
@@ -429,6 +448,7 @@ always_ff @(posedge clk_i or negedge rstn_i) begin
     rf_addr_b_o         <= rf_addr_b;
     alu_sel_o           <= alu_sel;
     mul_sel_o           <= mul_sel;
+    mul_div_en_o        <= mul_div_en;
     rpa_or_pc_o         <= rpa_or_pc;
     rpb_or_imm_o        <= rpb_or_imm;
     alu_write_rf_o      <= alu_write_rf;
@@ -466,6 +486,8 @@ begin
   rf_addr_b         = 5'b00000;
   alu_sel           = ALU_OP_ADD;
   mul_sel           = MUL_OP_MUL;
+  mul_div_en        = 1'b0;
+  clear_dec_counter = 1'b0;
   rpa_or_pc         = 1'b0;
   rpb_or_imm        = 1'b0;
   alu_write_rf      = 1'b0;
@@ -476,7 +498,7 @@ begin
   ctrl_jump         = 1'b0;
   ctrl_branch       = 1'b0;
   ctrl_branch_type  = BRANCH_EQ;
-  state_next        = eDEC_FIRST_CYCLE;
+  state_next        = eDEC_ISSUE_CYCLE;
   instr_issued      = 1'b1; // Most instructions are single-cycle
   instr_will_retire = 1'b1;
   csr_valid         = 1'b0;
@@ -501,6 +523,7 @@ begin
       end
     end
 
+
     OPCODE_OP: begin
       if (f3_f7_valid_op(funct3, funct7)) begin
         rf_addr_a    = regs1;
@@ -509,11 +532,39 @@ begin
         alu_write_rf = 1'b1;
         regdest2     = regdest;
       end else if (f3_f7_valid_op_mul(funct3, funct7)) begin
-	rf_addr_a    = regs1;
-	rf_addr_b    = regs2;
-	mul_sel      = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	mul_write_rf = 1'b1;
-	regdest2     = regdest;
+	unique case (state)
+	  // First cycle calculates condition
+	  eDEC_ISSUE_CYCLE: begin
+	    clear_dec_counter = 1'b1;
+	    rf_addr_a         = regs1;
+	    rf_addr_b         = regs2;
+	    mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	    is_mul            = (mul_sel == MUL_OP_MUL || mul_sel == MUL_OP_MULH ||
+		                mul_sel == MUL_OP_MULHSU || mul_sel == MUL_OP_MULHU) ?
+				1'b1 : 1'b0;
+	    mul_div_en        = 1'b1;
+	    state_next        = eDEC_STALL_CYCLE;
+	    instr_will_retire = 1'b0;
+	  end
+	  eDEC_STALL_CYCLE: begin
+	    if (is_mul) begin
+	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	      instr_issued      = 1'b0;
+	      regdest2          = regdest;
+	      mul_write_rf      = 1'b1;
+	    end else if (dec_counter < XLEN + 1) begin
+	      mul_div_en        = (dec_counter == 0 && (mul_sel == MUL_OP_DIV || mul_sel == MUL_OP_DIVU || mul_sel == MUL_OP_REM || mul_sel == MUL_OP_REMU)) ? 1'b1 : 1'b0;
+	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	      state_next        = eDEC_STALL_CYCLE;
+	      instr_issued      = 1'b0;
+	    end else begin
+	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	      regdest2          = regdest;
+	      mul_write_rf      = 1'b1;
+	    end
+	  end
+	  default:;
+	endcase
       end else begin
         illegal_instr = 1'b1;
       end
@@ -585,17 +636,17 @@ begin
       if (f3_branch_valid(funct3)) begin
         unique case (state)
           // First cycle calculates condition
-          eDEC_FIRST_CYCLE: begin
+          eDEC_ISSUE_CYCLE: begin
             rf_addr_a         = regs1;
             rf_addr_b         = regs2;
             alu_sel           = branch_type_to_alu_op( branch_ctrl_e'(funct3));
             ctrl_branch       = 1'b1;
             ctrl_branch_type  = branch_ctrl_e'(funct3);
-            state_next        = eDEC_SECOND_CYCLE;
+            state_next        = eDEC_STALL_CYCLE;
             instr_will_retire = 1'b0;
           end
           // Jump if condition is met
-          eDEC_SECOND_CYCLE: begin
+          eDEC_STALL_CYCLE: begin
             rpa_or_pc    = 1'b1;
             rpb_or_imm   = 1'b1;
             immediate    = imm_b_type;
