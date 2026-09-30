@@ -83,3 +83,16 @@ def lsu_fixture(hdl: HDL) -> HDL:
         waves = False,
     )
     return hdl
+
+@pytest.fixture
+def mul_test_fixture(hdl: HDL) -> HDL:
+    build_args = DEFAULT_ARGS
+    build_args = proc_env_args(build_args)
+    hdl.toplevel = "rvj1_mul_div"
+    hdl.build(
+        build_args = build_args,
+        parameters = {},
+        always=True,
+        waves=False,
+    )
+    return hdl
