@@ -9,13 +9,13 @@ module rvj1_mul_div import rvj1_pkg::*; (
   output logic [XLEN-1:0] res_o
 );
 
-  logic [XLEN-1:0] res_mux;
+  localparam int unsigned COUNT_WIDTH = $clog2(XLEN);
 
-  logic [XLEN:0] op_a_ext, op_b_ext;
+  logic [XLEN:0] op_a_ext, op_b_ext;  // Sign extended operands
+  logic [XLEN*2-1:0] pp [15:0];
+
   assign op_a_ext = {op_a_i[XLEN-1], op_a_i};
   assign op_b_ext = {op_b_i[XLEN-1], op_b_i};
-
-  logic [XLEN*2-1:0] pp [15:0];
 
   booth_core #(.XLEN(XLEN)) booth_mult (
     .op_a_ext(op_a_ext),
@@ -23,50 +23,51 @@ module rvj1_mul_div import rvj1_pkg::*; (
     .pp(pp)
   );
 
-  logic [XLEN*2-1:0] res_mul;
   always_comb begin
     // Add partial products
     res_mul = pp[0] + pp[1] + pp[2] + pp[3] +
-	  pp[4] + pp[5] + pp[6] + pp[7] +
-	  pp[8] + pp[9] + pp[10] + pp[11] +
-	  pp[12] + pp[13] + pp[14] + pp[15];
+	      pp[4] + pp[5] + pp[6] + pp[7] +
+	      pp[8] + pp[9] + pp[10] + pp[11] +
+	      pp[12] + pp[13] + pp[14] + pp[15];
   end
 
-localparam int unsigned COUNT_WIDTH = $clog2(XLEN);
+  logic [XLEN-1:0] res_rem, res_div, res_mux;
+  logic [XLEN*2-1:0] res_mul;
 
-  logic r_ready;
-  logic r_signed_ope;
+  logic                   r_ready;
+  logic                   r_signed_ope;
   logic [COUNT_WIDTH-1:0] r_count;
-  logic [XLEN-1:0] r_quotient;
-  logic w_dividend_sign;
-  logic r_dividend_sign;
-  logic remainder_sign;
-  logic [XLEN:0] r_remainder;
-  logic [XLEN-1:0] r_divisor;
-  logic [XLEN:0] divisor_ext;
-  logic divisor_sign;
-  logic [XLEN:0] rem_quo;
-  logic                diff_sign;
-  logic [XLEN:0] sub_add;
+  logic [XLEN-1:0]        r_quotient;
+  logic                   w_dividend_sign;
+  logic                   r_dividend_sign;
+  logic                   remainder_sign;
+  logic [XLEN:0]          r_remainder;
+  logic [XLEN-1:0]        r_divisor;
+  logic [XLEN:0]          divisor_ext;
+  logic                   divisor_sign;
+  logic [XLEN:0]          rem_quo;
+  logic                   diff_sign;
+  logic [XLEN:0]          sub_add;
+  logic                   signed_ope;
 
+  assign signed_ope = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
+  assign w_dividend_sign = op_a_i[XLEN-1] & signed_ope;
   assign ready = r_ready;
   assign divisor_sign = r_divisor[XLEN-1] & r_signed_ope;
   assign divisor_ext = {divisor_sign, r_divisor};
   assign remainder_sign = r_remainder[XLEN];
-
   assign rem_quo = {r_remainder[XLEN-1:0], r_quotient[XLEN-1]};
   assign diff_sign = remainder_sign ^ divisor_sign;
   assign sub_add = diff_sign ? rem_quo + divisor_ext :
                                rem_quo - divisor_ext;
 
-  logic [XLEN-1:0] res_rem, res_div;
-  // after process
+  // After process
   always_comb begin
     res_div  = (r_quotient << 1) | 1;
     res_rem = r_remainder[XLEN-1:0];
 
     if (r_remainder == 0) begin
-      // do nothing
+      // Do nothing
     end else if (r_remainder == divisor_ext) begin
       res_div  = res_div + 1;
       res_rem = res_rem - r_divisor;
@@ -83,10 +84,6 @@ localparam int unsigned COUNT_WIDTH = $clog2(XLEN);
       end
     end
   end
-
-  logic signed_ope;
-  assign signed_ope = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
-  assign w_dividend_sign = op_a_i[XLEN-1] & signed_ope;
 
   always @(posedge clk_i or negedge rstn_i) begin
     if (~rstn_i) begin
@@ -113,11 +110,11 @@ localparam int unsigned COUNT_WIDTH = $clog2(XLEN);
         r_divisor       <=  op_b_i;
         r_signed_ope    <=  signed_ope;
       end else if (~ready) begin
-        r_quotient  <=  {r_quotient[XLEN-2:0], ~diff_sign};
-        r_remainder <=  sub_add[XLEN:0];
-        r_count     <=  r_count + 1;
+        r_quotient      <=  {r_quotient[XLEN-2:0], ~diff_sign};
+        r_remainder     <=  sub_add[XLEN:0];
+        r_count         <=  r_count + 1;
         if (r_count == XLEN - 1) begin
-          r_ready <=  1'b1;
+          r_ready       <=  1'b1;
         end
       end
     end
