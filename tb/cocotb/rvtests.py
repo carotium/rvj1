@@ -1360,7 +1360,7 @@ class MULTest(Program):
             InstructionLUI(x10, 0x7FFF_F),
             InstructionADDI(x10, x10, 0x7FF),
             InstructionMUL(x10, x10, x10),
-#            InstructionADDI(x31, x0, 1)
+            InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
