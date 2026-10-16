@@ -87,7 +87,7 @@ def lsu_fixture(hdl: HDL) -> HDL:
 @pytest.fixture
 def mul_test_fixture(hdl: HDL) -> HDL:
     build_args = DEFAULT_ARGS
-    build_args = proc_env_args(build_args)
+    build_args = proc_env_args(build_args) + ["--debug"]
     hdl.toplevel = "rvj1_mul_div"
     hdl.build(
         build_args = build_args,
