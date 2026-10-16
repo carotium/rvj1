@@ -1,3 +1,4 @@
+// Multiple cycle multiplication
 module rvj1_mul_div import rvj1_pkg::*; (
   input  logic            clk_i,
   input  logic            rstn_i,
@@ -11,28 +12,129 @@ module rvj1_mul_div import rvj1_pkg::*; (
 
   localparam int unsigned COUNT_WIDTH = $clog2(XLEN);
 
-  logic [XLEN:0] op_a_ext, op_b_ext;  // Sign extended operands
-  logic [XLEN*2-1:0] pp [15:0];
+  typedef enum logic [2:0] {
+    eBOOTH_IDLE,
+    eBOOTH_LL,
+    eBOOTH_LH,
+    eBOOTH_HL,
+    eBOOTH_HH,
+    eBOOTH_DONE
+  } booth_fsm_e;
+  booth_fsm_e state, state_next;
 
-  assign op_a_ext = {op_a_i[XLEN-1], op_a_i};
-  assign op_b_ext = {op_b_i[XLEN-1], op_b_i};
+  logic [15:0]   op_a_H, op_a_L, op_b_H, op_b_L;
+  logic [17:0]   op_a_H_ext, op_a_L_ext, op_b_H_ext, op_b_L_ext;
 
-  booth_core #(.XLEN(XLEN)) booth_mult (
-    .op_a_ext(op_a_ext),
-    .op_b_ext(op_b_ext),
-    .pp(pp)
+  logic [17:0]   booth_mul_a, booth_mul_b;
+  logic [XLEN*2-1:0] booth_pp [8:0];
+  logic [XLEN*2-1:0] booth_pp_acc;
+  logic [6:0] booth_shift;
+
+  logic [XLEN*2-1:0] booth_res_acc;
+  logic [XLEN*2-1:0] res_mul;
+  logic              is_mul;
+
+  assign op_a_H = op_a_i[XLEN-1:16];
+  assign op_a_L = op_a_i[15:0];
+  assign op_b_H = op_b_i[XLEN-1:16];
+  assign op_b_L = op_b_i[15:0];
+
+  assign op_a_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU) ? {{2{op_a_H[15]}}, op_a_H} : {2'b0, op_a_H};
+  assign op_a_L_ext = {2'b0, op_a_L};
+  assign op_b_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH) ? {{2{op_b_H[15]}}, op_b_H} : {2'b0, op_b_H};
+  assign op_b_L_ext = {2'b0, op_b_L};
+
+  booth_core_half #(.XLEN(XLEN)) booth_mult (
+    .op_a_ext(booth_mul_a),
+    .op_b_ext(booth_mul_b),
+    .pp(booth_pp)
   );
 
   always_comb begin
-    // Add partial products
-    res_mul = pp[0] + pp[1] + pp[2] + pp[3] +
-	      pp[4] + pp[5] + pp[6] + pp[7] +
-	      pp[8] + pp[9] + pp[10] + pp[11] +
-	      pp[12] + pp[13] + pp[14] + pp[15];
+    is_mul = 1'b0;
+    booth_pp_acc = ~(state == eBOOTH_IDLE || state == eBOOTH_DONE) ? (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3]
+                 + booth_pp[4] + booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]) : '0;
+    booth_mul_a = '0;
+    booth_mul_b = '0;
+    booth_shift = '0;
+    unique case(state)
+      eBOOTH_IDLE: begin
+	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
+//	  booth_pp_acc = '0;
+	  booth_mul_a = '0;
+	  booth_mul_b = '0;
+	  state_next = (mul_div_en_i) ? eBOOTH_LL : eBOOTH_IDLE;
+	end else begin
+          state_next = eBOOTH_IDLE;
+	end
+      end
+      eBOOTH_LL: begin
+	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
+	  is_mul      = 1'b1;
+	  booth_mul_a = op_a_L_ext;
+	  booth_mul_b = op_b_L_ext;
+	  booth_shift = '0;
+	  state_next = eBOOTH_LH;
+	end
+      end
+      eBOOTH_LH: begin
+	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
+	  is_mul      = 1'b1;
+          booth_mul_a = op_a_L_ext;
+	  booth_mul_b = op_b_H_ext;
+	  booth_shift = 16;
+	  state_next = eBOOTH_HL;
+	end
+      end
+      eBOOTH_HL: begin
+	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
+	  is_mul      = 1'b1;
+	  booth_mul_a = op_a_H_ext;
+	  booth_mul_b = op_b_L_ext;
+	  booth_shift = 16;
+	  state_next = (sel_i == MUL_OP_MUL) ? eBOOTH_DONE : eBOOTH_HH;
+	end
+      end
+      eBOOTH_HH: begin
+	  is_mul      = 1'b1;
+        if (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
+	  booth_mul_a = op_a_H_ext;
+	  booth_mul_b = op_b_H_ext;
+	  booth_shift = 32;
+	  state_next = eBOOTH_DONE;
+	end
+      end
+      eBOOTH_DONE: begin
+        res_mul = booth_res_acc;
+	state_next = eBOOTH_IDLE;
+      end
+    endcase
   end
 
+  always_ff @(posedge clk_i) begin
+    if (~rstn_i) begin
+      state <= eBOOTH_IDLE;
+    end else state <= state_next;
+//    end else if (mul_div_en_i) begin
+//      state <= eBOOTH_LL;
+//    end else if (state = eBOOTH_LL) begin
+//      state <= state_next;
+//    end else
+//      state <= eBOOTH_IDLE;
+  end
+
+  register_wclear #(.DTYPE(logic [63:0])
+  ) booth_res_acc_inst (
+    .clk  (clk_i),
+    .rstn (rstn_i),
+    .clear (state == eBOOTH_IDLE),
+    .ce   (state != eBOOTH_IDLE),
+    .in   (booth_res_acc + (booth_pp_acc << booth_shift)),
+    .out  (booth_res_acc)
+  );
+
+
   logic [XLEN-1:0] res_rem, res_div, res_mux;
-  logic [XLEN*2-1:0] res_mul;
 
   logic                   r_ready;
   logic                   r_signed_ope;
@@ -85,7 +187,7 @@ module rvj1_mul_div import rvj1_pkg::*; (
     end
   end
 
-  always @(posedge clk_i or negedge rstn_i) begin
+  always_ff @(posedge clk_i) begin
     if (~rstn_i) begin
       r_quotient      <=  '0;
       r_dividend_sign <=  '0;
@@ -137,6 +239,7 @@ module rvj1_mul_div import rvj1_pkg::*; (
       end
     endcase
   end
+
 
   register #(
     .DTYPE(logic [XLEN-1:0]),
