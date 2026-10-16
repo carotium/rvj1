@@ -23,9 +23,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
   booth_fsm_e state, state_next;
 
   logic [15:0]   op_a_H, op_a_L, op_b_H, op_b_L;
-  logic [17:0]   op_a_H_ext, op_a_L_ext, op_b_H_ext, op_b_L_ext;
+  logic [16:0]   op_a_H_ext, op_a_L_ext, op_b_H_ext, op_b_L_ext;
 
-  logic [17:0]   booth_mul_a, booth_mul_b;
+  logic [16:0]   booth_mul_a, booth_mul_b;
   logic [XLEN*2-1:0] booth_pp [8:0];
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
@@ -39,10 +39,10 @@ module rvj1_mul_div import rvj1_pkg::*; (
   assign op_b_H = op_b_i[XLEN-1:16];
   assign op_b_L = op_b_i[15:0];
 
-  assign op_a_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU) ? {{2{op_a_H[15]}}, op_a_H} : {2'b0, op_a_H};
-  assign op_a_L_ext = {2'b0, op_a_L};
-  assign op_b_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH) ? {{2{op_b_H[15]}}, op_b_H} : {2'b0, op_b_H};
-  assign op_b_L_ext = {2'b0, op_b_L};
+  assign op_a_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU) ? {op_a_H[15], op_a_H} : {1'b0, op_a_H};
+  assign op_a_L_ext = {1'b0, op_a_L};
+  assign op_b_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH) ? {op_b_H[15], op_b_H} : {1'b0, op_b_H};
+  assign op_b_L_ext = {1'b0, op_b_L};
 
   booth_core_half #(.XLEN(XLEN)) booth_mult (
     .op_a_ext(booth_mul_a),
