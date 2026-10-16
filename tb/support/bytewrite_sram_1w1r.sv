@@ -36,7 +36,7 @@ module bytewrite_sram_1w1r #(
 logic [WordSize-1:0] RAM [MemSizeWordsTotal];
 
 initial begin
-    string mem_init_file0, mem_init_file1;
+    logic [8*256:0] mem_init_file0, mem_init_file1;
     if (MEM_INIT_FILE0 != "") begin
         if   (INIT_FILE_BIN0==1) $readmemb(MEM_INIT_FILE0, RAM, 0);
         else                     $readmemh(MEM_INIT_FILE0, RAM, 0);
