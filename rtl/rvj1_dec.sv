@@ -125,6 +125,9 @@ logic [11:0]  csr_addr;
 // Counter instantiation for controller number of cycles for MUL, DIV opcode
 // execution
 logic is_mul;
+logic is_mul_h;
+logic is_div;
+logic [2:0] mul_stall_cycles;
 logic [XLEN-1:0] dec_counter;
 logic clear_dec_counter; // Active HIGH clear
 cntr #(
@@ -132,7 +135,8 @@ cntr #(
   .RESET_VALUE(0)
 ) dec_cycle_cnt (
   .clk  (clk_i),
-  .rstn (rstn_i || ~clear_dec_counter),
+  .rstn (rstn_i),
+  .clear (clear_dec_counter),
   .ce   (state == eDEC_STALL_CYCLE),
   .count(dec_counter)
 );
@@ -540,26 +544,31 @@ begin
 	    rf_addr_b         = regs2;
 	    mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	    is_mul            = (mul_sel == MUL_OP_MUL || mul_sel == MUL_OP_MULH ||
-		                mul_sel == MUL_OP_MULHSU || mul_sel == MUL_OP_MULHU) ?
-				1'b1 : 1'b0;
+		                mul_sel == MUL_OP_MULHSU || mul_sel == MUL_OP_MULHU);
+	    is_mul_h          = is_mul && (mul_sel != MUL_OP_MUL);
+	    is_div            = (mul_sel == MUL_OP_DIV || mul_sel == MUL_OP_DIVU ||
+		                mul_sel == MUL_OP_REM || mul_sel == MUL_OP_REMU);
 	    mul_div_en        = 1'b1;
 	    state_next        = eDEC_STALL_CYCLE;
 	    instr_will_retire = 1'b0;
 	  end
 	  eDEC_STALL_CYCLE: begin
-	    if (is_mul) begin
+	    rf_addr_a         = regs1;
+	    rf_addr_b         = regs2;
+	    mul_stall_cycles  = (is_mul_h) ? 3'h6 : 3'h5;
+	    instr_will_retire = 1'b0;
+	    if (is_mul && (dec_counter < mul_stall_cycles)) begin
 	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+	      state_next        = eDEC_STALL_CYCLE;
 	      instr_issued      = 1'b0;
-	      regdest2          = regdest;
-	      mul_write_rf      = 1'b1;
-	    end else if (dec_counter < XLEN + 1) begin
-	      mul_div_en        = (dec_counter == 0 && (mul_sel == MUL_OP_DIV || mul_sel == MUL_OP_DIVU || mul_sel == MUL_OP_REM || mul_sel == MUL_OP_REMU)) ? 1'b1 : 1'b0;
+	    end else if (is_div && (dec_counter < XLEN + 2)) begin
 	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	      state_next        = eDEC_STALL_CYCLE;
 	      instr_issued      = 1'b0;
 	    end else begin
 	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	      regdest2          = regdest;
+	      instr_will_retire = 1'b1;
 	      mul_write_rf      = 1'b1;
 	    end
 	  end
