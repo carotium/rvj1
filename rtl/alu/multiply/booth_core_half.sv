@@ -1,6 +1,6 @@
 module booth_core_half #(parameter int XLEN = 32) (
-  input  logic signed [17:0] op_a_ext,
-  input  logic signed [17:0] op_b_ext,
+  input  logic signed [16:0] op_a_ext,
+  input  logic signed [16:0] op_b_ext,
   output logic [XLEN*2-1:0]    pp [8:0]
 );
 
@@ -10,8 +10,8 @@ module booth_core_half #(parameter int XLEN = 32) (
   logic [XLEN*2-1:0] op_b_XLEN_sign_ext;
   logic [2:0] bth [9:0];
 
-  assign op_a_XLEN_sign_ext = (op_a_ext[17]) ? {{(2*XLEN - 18){1'b1}}, op_a_ext} : {{(2*XLEN - 18){1'b0}}, op_a_ext};
-  assign op_b_XLEN_sign_ext = (op_b_ext[17]) ? {{(2*XLEN - 18){1'b1}}, op_b_ext} : {{(2*XLEN - 18){1'b0}}, op_b_ext};
+  assign op_a_XLEN_sign_ext = (op_a_ext[16]) ? {{(2*XLEN - 18){1'b1}}, op_a_ext} : {{(2*XLEN - 18){1'b0}}, op_a_ext};
+  assign op_b_XLEN_sign_ext = (op_b_ext[16]) ? {{(2*XLEN - 18){1'b1}}, op_b_ext} : {{(2*XLEN - 18){1'b0}}, op_b_ext};
 
   genvar i;
   generate
