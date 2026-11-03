@@ -79,9 +79,8 @@ module rvj1_mul_div import rvj1_pkg::*; (
 
   // Check synthesis for type of adder (tree or sequential)
   // Maybe resolve with using parantheses
-  assign booth_pp_acc = ~(booth_state == eBOOTH_IDLE || booth_state == eBOOTH_DONE) ?
-    (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3] + booth_pp[4] + 
-     booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]) : '0;
+  assign booth_pp_acc = (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3] + booth_pp[4] + 
+                         booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]);
 
   always_comb begin
     booth_mul_a = '0;
