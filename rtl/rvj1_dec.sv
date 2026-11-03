@@ -555,13 +555,13 @@ begin
 	  eDEC_STALL_CYCLE: begin
 	    rf_addr_a         = regs1;
 	    rf_addr_b         = regs2;
-	    mul_stall_cycles  = (is_mul_h) ? 3'h6 : 3'h5;
+	    mul_stall_cycles  = (is_mul_h) ? 3'h4 : 3'h3;
 	    instr_will_retire = 1'b0;
 	    if (is_mul && (dec_counter < mul_stall_cycles)) begin
 	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	      state_next        = eDEC_STALL_CYCLE;
 	      instr_issued      = 1'b0;
-	    end else if (is_div && (dec_counter < XLEN + 2)) begin
+	    end else if (is_div && (dec_counter < XLEN)) begin
 	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
 	      state_next        = eDEC_STALL_CYCLE;
 	      instr_issued      = 1'b0;
