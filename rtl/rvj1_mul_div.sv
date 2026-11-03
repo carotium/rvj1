@@ -6,7 +6,6 @@ module rvj1_mul_div import rvj1_pkg::*; (
   input  logic [XLEN-1:0] op_b_i, // Multiplier   | Divisor
   input  mul_op_e         sel_i,
   input  logic            mul_div_en_i,  // Enable
-  output logic            ready,
   output logic [XLEN-1:0] res_o
 );
 
@@ -20,8 +19,17 @@ module rvj1_mul_div import rvj1_pkg::*; (
     eBOOTH_HH,
     eBOOTH_DONE
   } booth_fsm_e;
-  booth_fsm_e state, state_next;
+  booth_fsm_e booth_state, booth_state_next;
 
+  typedef enum logic [1:0] {
+    eDIV_IDLE,
+    eDIV_CALC,
+    eDIV_DBZ,
+    eDIV_DONE
+  } div_fsm_e;
+  div_fsm_e div_state, div_state_n;
+
+  // Multiplication
   logic [15:0]   op_a_H, op_a_L, op_b_H, op_b_L;
   logic [16:0]   op_a_H_ext, op_a_L_ext, op_b_H_ext, op_b_L_ext;
 
@@ -30,18 +38,50 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
 
-  logic [XLEN*2-1:0] booth_res_acc;
+  logic [XLEN*2+1:0] booth_res_acc;
+  logic [XLEN*2+1:0] booth_res_acc_n;
   logic [XLEN*2-1:0] res_mul;
-  logic              is_mul;
+  logic is_mul;
+  logic is_mul_lower;
+  logic is_mul_upper;
+  logic is_mul_a_signed;
+  logic is_mul_b_signed;
+
+  // Division
+  logic [XLEN-1:0] res_rem, res_div, res_mux;
+  logic [XLEN-1:0] op_b;  // Copy of divisor
+  logic [COUNT_WIDTH-1:0] div_counter;
+  logic [XLEN-1:0]        quo, quo_n;
+  // Add one bit for overflow correction for REMU
+  logic [XLEN:0]        acc, acc_n;
+  logic                   a_sign, b_sign, sign_diff;
+  logic [XLEN-1:0]        au, bu;  // unsigned versions of operands
+  logic done, busy;
+  logic dbz;
+  logic signed_operation;
+  logic is_div;
+  logic is_div_div; // DIV ali LOWER
+  logic is_div_rem; // REM ali UPPER
+  // {acc, quo} = {REM, DIV}
+
+  assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
+  assign is_div_rem = (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU);
+  assign is_div = (is_div_div || is_div_rem);
+
+  assign is_mul_lower = (sel_i == MUL_OP_MUL);
+  assign is_mul_upper = (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHU || sel_i == MUL_OP_MULHSU);
+  assign is_mul_a_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU);
+  assign is_mul_b_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH);
+  assign is_mul = (is_mul_lower || is_mul_upper);
 
   assign op_a_H = op_a_i[XLEN-1:16];
   assign op_a_L = op_a_i[15:0];
   assign op_b_H = op_b_i[XLEN-1:16];
   assign op_b_L = op_b_i[15:0];
 
-  assign op_a_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU) ? {op_a_H[15], op_a_H} : {1'b0, op_a_H};
+  assign op_a_H_ext = (is_mul_a_signed) ? {op_a_H[15], op_a_H} : {1'b0, op_a_H};
   assign op_a_L_ext = {1'b0, op_a_L};
-  assign op_b_H_ext = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH) ? {op_b_H[15], op_b_H} : {1'b0, op_b_H};
+  assign op_b_H_ext = (is_mul_b_signed) ? {op_b_H[15], op_b_H} : {1'b0, op_b_H};
   assign op_b_L_ext = {1'b0, op_b_L};
 
   booth_core_half #(.XLEN(XLEN)) booth_mult (
@@ -50,206 +90,285 @@ module rvj1_mul_div import rvj1_pkg::*; (
     .pp(booth_pp)
   );
 
-  always_comb begin
-    is_mul = 1'b0;
-    booth_pp_acc = ~(state == eBOOTH_IDLE || state == eBOOTH_DONE) ? (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3]
+    // Preveri else assign (ce je potreben)
+    // Sinteza ali je sestevalnik tree ali seq
+    assign booth_pp_acc = ~(booth_state == eBOOTH_IDLE || booth_state == eBOOTH_DONE) ? (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3]
                  + booth_pp[4] + booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]) : '0;
+
+  always_comb begin
     booth_mul_a = '0;
     booth_mul_b = '0;
     booth_shift = '0;
-    unique case(state)
+    unique case(booth_state)
       eBOOTH_IDLE: begin
-	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
-//	  booth_pp_acc = '0;
+	if (is_mul) begin
 	  booth_mul_a = '0;
 	  booth_mul_b = '0;
-	  state_next = (mul_div_en_i) ? eBOOTH_LL : eBOOTH_IDLE;
+	  booth_state_next = (mul_div_en_i) ? eBOOTH_LL : eBOOTH_IDLE;
 	end else begin
-          state_next = eBOOTH_IDLE;
+          booth_state_next = eBOOTH_IDLE;
 	end
       end
       eBOOTH_LL: begin
-	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
-	  is_mul      = 1'b1;
+	if (is_mul) begin
 	  booth_mul_a = op_a_L_ext;
 	  booth_mul_b = op_b_L_ext;
 	  booth_shift = '0;
-	  state_next = eBOOTH_LH;
+	  booth_state_next = eBOOTH_LH;
 	end
       end
       eBOOTH_LH: begin
-	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
-	  is_mul      = 1'b1;
+	if (is_mul) begin
           booth_mul_a = op_a_L_ext;
 	  booth_mul_b = op_b_H_ext;
 	  booth_shift = 16;
-	  state_next = eBOOTH_HL;
+	  booth_state_next = eBOOTH_HL;
 	end
       end
       eBOOTH_HL: begin
-	if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
-	  is_mul      = 1'b1;
+	if (is_mul) begin
 	  booth_mul_a = op_a_H_ext;
 	  booth_mul_b = op_b_L_ext;
 	  booth_shift = 16;
-	  state_next = (sel_i == MUL_OP_MUL) ? eBOOTH_DONE : eBOOTH_HH;
+	  booth_state_next = (sel_i == MUL_OP_MUL) ? eBOOTH_DONE : eBOOTH_HH;
 	end
       end
       eBOOTH_HH: begin
-	  is_mul      = 1'b1;
         if (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
 	  booth_mul_a = op_a_H_ext;
 	  booth_mul_b = op_b_H_ext;
 	  booth_shift = 32;
-	  state_next = eBOOTH_DONE;
+	  booth_state_next = eBOOTH_DONE;
 	end
       end
       eBOOTH_DONE: begin
-        res_mul = booth_res_acc;
-	state_next = eBOOTH_IDLE;
+        res_mul = booth_res_acc[63:0];
+	booth_state_next = eBOOTH_IDLE;
       end
     endcase
   end
 
-  always_ff @(posedge clk_i) begin
-    if (~rstn_i) begin
-      state <= eBOOTH_IDLE;
-    end else state <= state_next;
-//    end else if (mul_div_en_i) begin
-//      state <= eBOOTH_LL;
-//    end else if (state = eBOOTH_LL) begin
-//      state <= state_next;
-//    end else
-//      state <= eBOOTH_IDLE;
+  assign signed_operation = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
+  assign a_sign = op_a_i[XLEN-1] & signed_operation;
+  assign b_sign = op_b_i[XLEN-1] & signed_operation;
+  assign sign_diff = (a_sign ^ b_sign);
+
+  assign au = (a_sign) ? -op_a_i[XLEN-1:0] : op_a_i[XLEN-1:0];
+  assign bu = (b_sign) ? -op_b_i[XLEN-1:0] : op_b_i[XLEN-1:0];
+  
+  // spremeni ime booth_res_acc
+//  assign quotient = booth_res_acc[32:0];
+//  assign remainder = booth_res_acc[64:33];
+
+//  pogoj kot signal
+ 
+//  assign booth_res_acc_n = (signed_operation && sign_diff) ? -{acc, quo} : 
+//	                   (signed_operation)              ?  {acc, quo} : '0;
+
+  always_comb begin
+    // inicializacija vse na '0
+    unique case(div_state)
+      eDIV_IDLE: begin
+	res_div = '0;
+	res_rem = '0;
+	dbz     = 1'b0;
+	div_state_n = eDIV_IDLE;
+	if (mul_div_en_i && (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU || sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)) begin
+	  div_state_n = eDIV_CALC;
+	  //div_counter = 0; //clear div_counter
+	  if (op_b_i == '0) begin // Division by zero
+	    div_state_n = eDIV_DBZ;
+	    dbz = 1'b1;
+          end else begin
+
+	    {acc_n, quo_n} = {{(XLEN){1'b0}}, au, 1'b0};
+	  end
+	end
+      end
+      eDIV_CALC: begin
+        if (div_counter <= XLEN - 1) begin
+//	  div_counter = div_counter + 1; // increment div_counter
+          if (acc >= bu) begin
+	    acc_n = acc - bu;
+	    {acc_n, quo_n} = {acc_n[XLEN-1:0], quo, 1'b1};
+	  end else begin
+		  // Preveri tukaj ce rabim dodatni bit
+//	    if (div_counter < XLEN - 1)
+	      {acc_n, quo_n} = {acc, quo} << 1;
+	  end
+	  if (div_counter == XLEN - 1) begin
+	    div_state_n = eDIV_DONE;
+	  end
+        end
+//	  if (quo != '0) begin
+//            
+//	    res_div = (sign_diff) ? -quo : quo;
+//	    res_rem = (a_sign) ? -{1'b0, acc[XLEN-1:1]} : {1'b0, acc[XLEN-1:1]};
+//	  end else begin
+//            res_div = quo;
+//	    res_rem = (a_sign) ? -acc : acc;
+//          end
+      end
+      eDIV_DBZ: begin
+	if (div_counter == XLEN - 1)
+	  div_state_n = eDIV_DONE;
+      end
+      eDIV_DONE: begin
+	div_state_n = eDIV_IDLE;
+      end
+      default:;
+    endcase
   end
 
-  register_wclear #(.DTYPE(logic [63:0])
-  ) booth_res_acc_inst (
-    .clk  (clk_i),
-    .rstn (rstn_i),
-    .clear (state == eBOOTH_IDLE),
-    .ce   (state != eBOOTH_IDLE),
-    .in   (booth_res_acc + (booth_pp_acc << booth_shift)),
-    .out  (booth_res_acc)
+  always_ff @(posedge clk_i) begin
+    acc <= acc_n;
+    quo <= quo_n;
+  end
+
+  cntr #(
+    .WORD_WIDTH($clog2(XLEN)),
+    .RESET_VALUE(0)
+  ) div_counter_inst (
+    .clk   (clk_i),
+    .rstn  (rstn_i),
+    .clear (div_state == eDIV_IDLE),
+    .ce    (div_state == eDIV_CALC || div_state == eDIV_DBZ),
+    .count (div_counter)
   );
 
-
-  logic [XLEN-1:0] res_rem, res_div, res_mux;
-
-  logic                   r_ready;
-  logic                   r_signed_ope;
-  logic [COUNT_WIDTH-1:0] r_count;
-  logic [XLEN-1:0]        r_quotient;
-  logic                   w_dividend_sign;
-  logic                   r_dividend_sign;
-  logic                   remainder_sign;
-  logic [XLEN:0]          r_remainder;
-  logic [XLEN-1:0]        r_divisor;
-  logic [XLEN:0]          divisor_ext;
-  logic                   divisor_sign;
-  logic [XLEN:0]          rem_quo;
-  logic                   diff_sign;
-  logic [XLEN:0]          sub_add;
-  logic                   signed_ope;
-
-  assign signed_ope = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
-  assign w_dividend_sign = op_a_i[XLEN-1] & signed_ope;
-  assign ready = r_ready;
-  assign divisor_sign = r_divisor[XLEN-1] & r_signed_ope;
-  assign divisor_ext = {divisor_sign, r_divisor};
-  assign remainder_sign = r_remainder[XLEN];
-  assign rem_quo = {r_remainder[XLEN-1:0], r_quotient[XLEN-1]};
-  assign diff_sign = remainder_sign ^ divisor_sign;
-  assign sub_add = diff_sign ? rem_quo + divisor_ext :
-                               rem_quo - divisor_ext;
-
-  // After process
-  always_comb begin
-    res_div  = (r_quotient << 1) | 1;
-    res_rem = r_remainder[XLEN-1:0];
-
-    if (r_remainder == 0) begin
-      // Do nothing
-    end else if (r_remainder == divisor_ext) begin
-      res_div  = res_div + 1;
-      res_rem = res_rem - r_divisor;
-    end else if (r_remainder == -divisor_ext) begin
-      res_div  = res_div - 1;
-      res_rem = res_rem + r_divisor;
-    end else if (remainder_sign ^ r_dividend_sign) begin
-      if (diff_sign) begin
-        res_div  = res_div - 1;
-        res_rem = res_rem + r_divisor;
-      end else begin
-        res_div  = res_div + 1;
-        res_rem = res_rem - r_divisor;
-      end
-    end
-  end
-
-  always_ff @(posedge clk_i) begin
-    if (~rstn_i) begin
-      r_quotient      <=  '0;
-      r_dividend_sign <=  '0;
-      r_remainder     <=  '0;
-      r_divisor       <=  '0;
-      r_count         <=  '0;
-      r_ready         <=  1'b1;
-      r_signed_ope    <=  1'b0;
-    end else begin
-      if (mul_div_en_i) begin
-        // RISC-V's div by 0 spec
-        if (op_b_i == '0) begin
-            r_quotient  <=  '1;
-            r_remainder <=  {w_dividend_sign, op_a_i};
-        end else begin
-            r_quotient  <=  op_a_i;
-            r_remainder <=  {(XLEN+1){w_dividend_sign}};
-            r_ready     <=  1'b0;
-        end
-        r_count         <=  '0;
-        r_dividend_sign <=  w_dividend_sign;
-        r_divisor       <=  op_b_i;
-        r_signed_ope    <=  signed_ope;
-      end else if (~ready) begin
-        r_quotient      <=  {r_quotient[XLEN-2:0], ~diff_sign};
-        r_remainder     <=  sub_add[XLEN:0];
-        r_count         <=  r_count + 1;
-        if (r_count == XLEN - 1) begin
-          r_ready       <=  1'b1;
-        end
-      end
-    end
-  end
-
-  // Output assignment
-  always_comb begin
-    unique case (sel_i)
-      MUL_OP_MUL: begin
-        res_mux = res_mul[XLEN-1:0];
-      end
-      MUL_OP_MULH, MUL_OP_MULHSU, MUL_OP_MULHU: begin
-	res_mux = res_mul[XLEN*2-1:XLEN];
-      end
-      MUL_OP_DIV, MUL_OP_DIVU: begin
-	res_mux = res_div;
-      end
-      MUL_OP_REM, MUL_OP_REMU: begin
-	res_mux = res_rem;
-      end
-    endcase
-  end
-
-
   register #(
-    .DTYPE(logic [XLEN-1:0]),
-    .RESET_VALUE(0)
-  ) res_reg_inst (
+    .DTYPE(div_fsm_e),
+    .RESET_VALUE(eDIV_IDLE)
+  ) div_state_inst (
     .clk  (clk_i),
     .rstn (rstn_i),
     .ce   (1'b1),
-    .in   (res_mux),
-    .out  (res_o)
+    .in   (div_state_n),
+    .out  (div_state)
+  );
+
+//  always_comb begin
+//    if (acc >= {1'b0, bu}) begin
+//      acc_n = acc - bu;
+//      {acc_n, quo_n} = {acc_n[XLEN-2:0], quo, 1'b1};
+//    end else begin
+//      {acc_n, quo_n} = {acc, quo} << 1;
+//    end
+//  end
+
+//  always_ff @(posedge clk_i) begin
+//    if (~rstn_i) begin
+//      busy <= 1'b0;
+//      done <= 1'b0;
+//      res_div <= '0;
+//      res_rem <= '0;
+//      dbz <= 1'b0;
+//    end else if (mul_div_en_i && (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU || sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)) begin
+//      div_counter <= 0; // clear div_counter
+//      if (op_b_i == 0) begin // Division by zero
+//	busy <= 1'b0;
+//	done <= 1'b1;
+//	dbz <= 1'b1;
+//      end else begin
+//	done <= 1'b0;
+//	busy <= 1'b1;
+//	dbz <= 1'b0;
+//	res_rem <= '0;
+//	res_div <= '0;
+//	sign_diff <= (a_sign ^ b_sign);
+//	{acc, quo} <= {{(XLEN-1){1'b0}}, au, 1'b0}; // init
+//      end
+//    end else if (busy) begin
+//      if (div_counter == XLEN - 1) begin
+//        busy <= 1'b0;
+//        done <= 1'b1;
+//	if (quo_n != '0) begin
+//	  res_div <= (sign_diff) ? -quo_n : quo_n;
+//	  res_rem <= (a_sign) ? -{1'b0, acc_n[XLEN-1:1]} : {1'b0, acc_n[XLEN-1:1]};
+//	end else begin
+//	  res_div <= quo_n;
+//          res_rem <= (a_sign) ? -acc : acc; // undo final shift
+//	end
+//      end else begin
+//        div_counter <= div_counter + 1;
+//        acc <= acc_n;
+//        quo <= quo_n;
+//      end
+//    end
+//  end    
+
+  always_comb begin
+    booth_res_acc_n = '0;
+
+    if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU)
+      booth_res_acc_n = booth_res_acc + (booth_pp_acc << booth_shift);
+    else
+//      booth_res_acc_n = {acc, quo};
+      booth_res_acc_n = {acc_n, quo_n};
+  end
+  // pogoj kot signal use_upper_reg
+//  assign res_o = (sel_i == MUL_OP_DIV && sign_diff)            ? -booth_res_acc_n[31:0]  :
+//	         (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU) ?  booth_res_acc_n[31:0]  :
+//		 (sel_i == MUL_OP_REM && a_sign)               ? -booth_res_acc[64:32] :
+//		 (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU) ?  booth_res_acc[64:32] :
+//		 (is_mul)                                      ?  booth_res_acc_n[64:32] : '0;
+
+// Popravi potem tukaj
+  assign res_o = ((sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU) && dbz)                    ?  '1                             :
+	         (sel_i == MUL_OP_DIV && sign_diff)                                        ? -booth_res_acc_n[31:0]          :
+	  	 (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU)                             ?  booth_res_acc_n[31:0]          :
+		 ((sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU) && dbz)                    ?  op_a_i                         :
+	         (sel_i == MUL_OP_REM && a_sign)                                           ? -booth_res_acc_n[65:33] :
+	         (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)                             ?  booth_res_acc_n[65:33] :
+		 (is_mul_lower)                                                     ?  booth_res_acc_n[31:0]          :
+		 (is_mul_upper) ? booth_res_acc_n[64:32] : '0;
+
+  // Output assignment
+//  always_comb begin
+//    unique case (sel_i)
+//      MUL_OP_MUL: begin
+//        res_o = res_mul[XLEN-1:0];
+//      end
+//      MUL_OP_MULH, MUL_OP_MULHSU, MUL_OP_MULHU: begin
+//	res_o = res_mul[XLEN*2-1:XLEN];
+//      end
+//      MUL_OP_DIV, MUL_OP_DIVU: begin
+//	if (dbz) begin
+//          res_o = '1;
+//	end else begin
+//          res_o = res_div;
+//	end
+//      end
+//      MUL_OP_REM, MUL_OP_REMU: begin
+//        if (dbz) begin
+//          res_o = op_a_i;
+//	end else begin
+//	  res_o = res_rem;
+//	end
+//      end
+//    endcase
+//  end
+
+  register #(
+    .DTYPE(booth_fsm_e),
+    .RESET_VALUE(eBOOTH_IDLE)
+  ) booth_state_inst (
+    .clk  (clk_i),
+    .rstn (rstn_i),
+    .ce   (1'b1),
+    .in   (booth_state_next),
+    .out  (booth_state)
+  );
+
+  register_wclear #(
+    .DTYPE(logic [65:0])
+  ) booth_res_acc_inst (
+    .clk  (clk_i),
+    .rstn (rstn_i),
+    .clear ((div_counter == XLEN) || (booth_state == eBOOTH_DONE)),
+    .ce   (((booth_state != eBOOTH_IDLE)) && booth_state != eBOOTH_DONE),
+    .in   (booth_res_acc_n),
+    .out  (booth_res_acc)
   );
 
 endmodule
