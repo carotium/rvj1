@@ -38,10 +38,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
 
-  logic [XLEN*2:0] booth_res_acc;
-  logic [XLEN*2:0] booth_res_acc_n;
+  logic [XLEN*2:0] res_acc;
+  logic [XLEN*2:0] res_acc_n;
 
-  logic [XLEN*2-1:0] res_mul;
   logic is_mul;
   logic is_mul_lower;
   logic is_mul_upper;
@@ -55,21 +54,18 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic                   a_sign, b_sign, sign_diff;
   logic [XLEN-1:0]        au, bu;                     // Unsigned operands
   logic dbz;
-  logic signed_operation;
+  logic is_div_signed;
 
   logic is_div;
   logic is_div_div;
   logic is_div_rem;
 
-  assign is_mul_lower = (sel_i == MUL_OP_MUL);
-  assign is_mul_upper = (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHU || sel_i == MUL_OP_MULHSU);
+  /******* Multiplication *******/
   assign is_mul_a_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU);
   assign is_mul_b_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH);
+  assign is_mul_lower = (sel_i == MUL_OP_MUL);
+  assign is_mul_upper = (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHU || sel_i == MUL_OP_MULHSU);
   assign is_mul = (is_mul_lower || is_mul_upper);
-
-  assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
-  assign is_div_rem = (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU);
-  assign is_div = (is_div_div || is_div_rem);
 
   assign op_a_H = op_a_i[XLEN-1:16];
   assign op_a_L = op_a_i[15:0];
@@ -81,16 +77,11 @@ module rvj1_mul_div import rvj1_pkg::*; (
   assign op_b_H_ext = (is_mul_b_signed) ? {op_b_H[15], op_b_H} : {1'b0, op_b_H};
   assign op_b_L_ext = {1'b0, op_b_L};
 
-  booth_core_half #(.XLEN(XLEN)) booth_mult (
-    .op_a_ext(booth_mul_a),
-    .op_b_ext(booth_mul_b),
-    .pp(booth_pp)
-  );
-
-    // Preveri else assign (ce je potreben)
-    // Sinteza ali je sestevalnik tree ali seq
-    assign booth_pp_acc = ~(booth_state == eBOOTH_IDLE || booth_state == eBOOTH_DONE) ? (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3]
-                 + booth_pp[4] + booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]) : '0;
+  // Check synthesis for type of adder (tree or sequential)
+  // Maybe resolve with using parantheses
+  assign booth_pp_acc = ~(booth_state == eBOOTH_IDLE || booth_state == eBOOTH_DONE) ?
+    (booth_pp[0] + booth_pp[1] + booth_pp[2] + booth_pp[3] + booth_pp[4] + 
+     booth_pp[5] + booth_pp[6] + booth_pp[7] + booth_pp[8]) : '0;
 
   always_comb begin
     booth_mul_a = '0;
@@ -98,85 +89,85 @@ module rvj1_mul_div import rvj1_pkg::*; (
     booth_shift = '0;
     unique case(booth_state)
       eBOOTH_IDLE: begin
-	if (is_mul) begin
-	  booth_mul_a = '0;
-	  booth_mul_b = '0;
-	  booth_state_next = (mul_div_en_i) ? eBOOTH_LL : eBOOTH_IDLE;
-	end else begin
-          booth_state_next = eBOOTH_IDLE;
-	end
+	      if (is_mul) begin
+          booth_mul_a = '0;
+          booth_mul_b = '0;
+          booth_state_next = (mul_div_en_i) ? eBOOTH_LL : eBOOTH_IDLE;
+        end else booth_state_next = eBOOTH_IDLE;
       end
       eBOOTH_LL: begin
-	if (is_mul) begin
-	  booth_mul_a = op_a_L_ext;
-	  booth_mul_b = op_b_L_ext;
-	  booth_shift = '0;
-	  booth_state_next = eBOOTH_LH;
-	end
+      	if (is_mul) begin
+          booth_state_next = eBOOTH_LH;
+          booth_mul_a      = op_a_L_ext;
+          booth_mul_b      = op_b_L_ext;
+          booth_shift      = '0;
+	      end
       end
       eBOOTH_LH: begin
-	if (is_mul) begin
-          booth_mul_a = op_a_L_ext;
-	  booth_mul_b = op_b_H_ext;
-	  booth_shift = 16;
-	  booth_state_next = eBOOTH_HL;
-	end
+	      if (is_mul) begin
+          booth_state_next = eBOOTH_HL;
+          booth_mul_a      = op_a_L_ext;
+          booth_mul_b      = op_b_H_ext;
+          booth_shift      = 16;
+	      end
       end
       eBOOTH_HL: begin
-	if (is_mul) begin
-	  booth_mul_a = op_a_H_ext;
-	  booth_mul_b = op_b_L_ext;
-	  booth_shift = 16;
-	  booth_state_next = (sel_i == MUL_OP_MUL) ? eBOOTH_DONE : eBOOTH_HH;
-	end
+        if (is_mul) begin
+          booth_state_next = (is_mul_lower) ? eBOOTH_DONE : eBOOTH_HH;
+          booth_mul_a      = op_a_H_ext;
+          booth_mul_b      = op_b_L_ext;
+          booth_shift      = 16;
+        end
       end
       eBOOTH_HH: begin
-        if (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU) begin
-	  booth_mul_a = op_a_H_ext;
-	  booth_mul_b = op_b_H_ext;
-	  booth_shift = 32;
-	  booth_state_next = eBOOTH_DONE;
-	end
+        if (is_mul_upper) begin
+          booth_state_next = eBOOTH_DONE;
+          booth_mul_a      = op_a_H_ext;
+          booth_mul_b      = op_b_H_ext;
+          booth_shift      = 32;
+	      end
       end
       eBOOTH_DONE: begin
-        res_mul = booth_res_acc[63:0];
-	booth_state_next = eBOOTH_IDLE;
+      	booth_state_next = eBOOTH_IDLE;
       end
     endcase
   end
 
-  assign signed_operation = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
-  assign a_sign = op_a_i[XLEN-1] & signed_operation;
-  assign b_sign = op_b_i[XLEN-1] & signed_operation;
+  booth_core_half #(.XLEN(XLEN)) booth_mult (
+    .op_a_ext(booth_mul_a),
+    .op_b_ext(booth_mul_b),
+    .pp(booth_pp)
+  );
+
+  /******* Division *******/
+  assign is_div_signed = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
+  assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
+  assign is_div_rem = (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU);
+  assign is_div = (is_div_div || is_div_rem);  
+
+  assign a_sign = op_a_i[XLEN-1] & is_div_signed;
+  assign b_sign = op_b_i[XLEN-1] & is_div_signed;
   assign sign_diff = (a_sign ^ b_sign);
 
   assign au = (a_sign) ? -op_a_i[XLEN-1:0] : op_a_i[XLEN-1:0];
   assign bu = (b_sign) ? -op_b_i[XLEN-1:0] : op_b_i[XLEN-1:0];
-  
-  // spremeni ime booth_res_acc
-//  assign quotient = booth_res_acc[32:0];
-//  assign remainder = booth_res_acc[64:33];
-
-//  pogoj kot signal
- 
-//  assign booth_res_acc_n = (signed_operation && sign_diff) ? -{acc, quo} : 
-//	                   (signed_operation)              ?  {acc, quo} : '0;
-
+   
   always_comb begin
     unique case(div_state)
       eDIV_IDLE: begin
-        dbz     = 1'b0;
+        dbz = 1'b0;
         div_state_n = eDIV_IDLE;
-        if (mul_div_en_i && (is_div)) begin
+        if (mul_div_en_i && is_div) begin
           div_state_n = eDIV_CALC;
           if (op_b_i == '0) begin     // Division by zero
             div_state_n = eDIV_DBZ;
             dbz = 1'b1;
-          end else {acc_n, quo_n} = {{(XLEN){1'b0}}, au, 1'b0};
+          end else
+            {acc_n, quo_n} = {{(XLEN){1'b0}}, au, 1'b0};
         end
       end
       eDIV_CALC: begin
-        if (div_counter <= XLEN - 1) begin
+        if (div_counter <= (XLEN - 1)) begin
           if (acc >= bu) begin
 	          acc_n = acc - bu;
 	          {acc_n, quo_n} = {acc_n[XLEN-1:0], quo, 1'b1};
@@ -194,19 +185,19 @@ module rvj1_mul_div import rvj1_pkg::*; (
     endcase
   end
 
-  assign booth_res_acc_n = (is_mul) ? booth_res_acc + (booth_pp_acc << booth_shift) : {acc_n, quo_n};
+  assign res_acc_n = (is_mul) ? (res_acc + (booth_pp_acc << booth_shift)) : {acc_n, quo_n};
 
-  assign res_o =  (is_div_div && dbz)                                     ?  '1                     :
-	                (sel_i == MUL_OP_DIV && sign_diff)                      ? -booth_res_acc_n[31:0]  :
-	  	            (is_div_div)           ?  booth_res_acc_n[31:0]  :
-		              (is_div_rem && dbz)  ?  op_a_i                 :
-	                (sel_i == MUL_OP_REM && a_sign)                         ? -booth_res_acc_n[64:33] :
-	                (is_div_rem)                                            ?  booth_res_acc_n[64:33] :
-		              (is_mul_lower)                                          ?  booth_res_acc_n[31:0]  :
-		              (is_mul_upper)                                          ? booth_res_acc_n[63:32]  : '0;
+  assign res_o =  (is_div_div && dbz)                ?  '1               :
+	                (sel_i == MUL_OP_DIV && sign_diff) ? -res_acc_n[31:0]  :
+	  	            (is_div_div)                       ?  res_acc_n[31:0]  :
+		              (is_div_rem && dbz)                ?  op_a_i           :
+	                (sel_i == MUL_OP_REM && a_sign)    ? -res_acc_n[64:33] :
+	                (is_div_rem)                       ?  res_acc_n[64:33] :
+		              (is_mul_lower)                     ?  res_acc_n[31:0]  :
+		              (is_mul_upper)                     ?  res_acc_n[63:32] : '0;
 
   cntr #(
-    .WORD_WIDTH($clog2(XLEN)),
+    .WORD_WIDTH ($clog2(XLEN)),
     .RESET_VALUE(0)
   ) div_counter_inst (
     .clk   (clk_i),
@@ -238,15 +229,15 @@ module rvj1_mul_div import rvj1_pkg::*; (
     .out  (acc)
   );
 
-  register #(
-    .DTYPE(div_fsm_e),
-    .RESET_VALUE(eDIV_IDLE)
-  ) div_state_inst (
+  register_wclear #(
+    .DTYPE(logic [65:0])
+  ) res_acc_inst (
     .clk  (clk_i),
     .rstn (rstn_i),
-    .ce   (1'b1),
-    .in   (div_state_n),
-    .out  (div_state)
+    .clear((div_counter == XLEN) || (booth_state == eBOOTH_DONE)),
+    .ce   ((booth_state != eBOOTH_IDLE) && (booth_state != eBOOTH_DONE)),
+    .in   (res_acc_n),
+    .out  (res_acc)
   );
 
   register #(
@@ -260,15 +251,15 @@ module rvj1_mul_div import rvj1_pkg::*; (
     .out  (booth_state)
   );
 
-  register_wclear #(
-    .DTYPE(logic [65:0])
-  ) booth_res_acc_inst (
+  register #(
+    .DTYPE(div_fsm_e),
+    .RESET_VALUE(eDIV_IDLE)
+  ) div_state_inst (
     .clk  (clk_i),
     .rstn (rstn_i),
-    .clear ((div_counter == XLEN) || (booth_state == eBOOTH_DONE)),
-    .ce   (((booth_state != eBOOTH_IDLE)) && booth_state != eBOOTH_DONE),
-    .in   (booth_res_acc_n),
-    .out  (booth_res_acc)
+    .ce   (1'b1),
+    .in   (div_state_n),
+    .out  (div_state)
   );
 
 endmodule
