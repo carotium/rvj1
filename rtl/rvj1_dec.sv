@@ -129,7 +129,7 @@ logic is_mul_h;
 logic is_div;
 logic [2:0] mul_stall_cycles;
 logic [XLEN-1:0] dec_counter;
-logic clear_dec_counter; // Active HIGH clear
+logic clear_dec_counter;
 cntr #(
   .WORD_WIDTH (XLEN),
   .RESET_VALUE(0)
@@ -221,13 +221,13 @@ function automatic mul_op_e f3_7_to_mul_rr_op(
     F7_MUL_DIV_REM: begin
       unique case (f3)
         F3_MUL:    op = MUL_OP_MUL;
-	F3_MULH:   op = MUL_OP_MULH;
-	F3_MULHSU: op = MUL_OP_MULHSU;
-	F3_MULHU:  op = MUL_OP_MULHU;
-	F3_DIV:    op = MUL_OP_DIV;
-	F3_DIVU:   op = MUL_OP_DIVU;
-	F3_REM:    op = MUL_OP_REM;
-	F3_REMU:   op = MUL_OP_REMU;
+        F3_MULH:   op = MUL_OP_MULH;
+        F3_MULHSU: op = MUL_OP_MULHSU;
+        F3_MULHU:  op = MUL_OP_MULHU;
+        F3_DIV:    op = MUL_OP_DIV;
+        F3_DIVU:   op = MUL_OP_DIVU;
+        F3_REM:    op = MUL_OP_REM;
+        F3_REMU:   op = MUL_OP_REMU;
       endcase
     end
     default: error = 1'b1;
@@ -536,47 +536,46 @@ begin
         alu_write_rf = 1'b1;
         regdest2     = regdest;
       end else if (f3_f7_valid_op_mul(funct3, funct7)) begin
-	unique case (state)
-	  // First cycle calculates condition
-	  eDEC_ISSUE_CYCLE: begin
-	    clear_dec_counter = 1'b1;
-	    rf_addr_a         = regs1;
-	    rf_addr_b         = regs2;
-	    mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	    is_mul            = (mul_sel == MUL_OP_MUL || mul_sel == MUL_OP_MULH ||
-		                mul_sel == MUL_OP_MULHSU || mul_sel == MUL_OP_MULHU);
-	    is_mul_h          = is_mul && (mul_sel != MUL_OP_MUL);
-	    is_div            = (mul_sel == MUL_OP_DIV || mul_sel == MUL_OP_DIVU ||
-		                mul_sel == MUL_OP_REM || mul_sel == MUL_OP_REMU);
-	    mul_div_en        = 1'b1;
-	    state_next        = eDEC_STALL_CYCLE;
-	    instr_will_retire = 1'b0;
-	  end
-	  eDEC_STALL_CYCLE: begin
-	    rf_addr_a         = regs1;
-	    rf_addr_b         = regs2;
-	    mul_stall_cycles  = (is_mul_h) ? 3'h4 : 3'h3;
-	    instr_will_retire = 1'b0;
-	    if (is_mul && (dec_counter < mul_stall_cycles)) begin
-	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	      state_next        = eDEC_STALL_CYCLE;
-	      instr_issued      = 1'b0;
-	    end else if (is_div && (dec_counter < XLEN)) begin
-	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	      state_next        = eDEC_STALL_CYCLE;
-	      instr_issued      = 1'b0;
-	    end else begin
-	      mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
-	      regdest2          = regdest;
-	      instr_will_retire = 1'b1;
-	      mul_write_rf      = 1'b1;
-	    end
-	  end
-	  default:;
-	endcase
-      end else begin
+	      unique case (state)
+	      // First cycle calculates condition
+	        eDEC_ISSUE_CYCLE: begin
+            clear_dec_counter = 1'b1;
+            rf_addr_a         = regs1;
+            rf_addr_b         = regs2;
+            mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+            is_mul            = (mul_sel == MUL_OP_MUL || mul_sel == MUL_OP_MULH ||
+                          mul_sel == MUL_OP_MULHSU || mul_sel == MUL_OP_MULHU);
+            is_mul_h          = is_mul && (mul_sel != MUL_OP_MUL);
+            is_div            = (mul_sel == MUL_OP_DIV || mul_sel == MUL_OP_DIVU ||
+                          mul_sel == MUL_OP_REM || mul_sel == MUL_OP_REMU);
+            mul_div_en        = 1'b1;
+            state_next        = eDEC_STALL_CYCLE;
+            instr_will_retire = 1'b0;
+	        end
+	        eDEC_STALL_CYCLE: begin
+            rf_addr_a           = regs1;
+            rf_addr_b           = regs2;
+            mul_stall_cycles    = (is_mul_h) ? 3'h4 : 3'h3;
+            instr_will_retire   = 1'b0;
+            if (is_mul && (dec_counter < mul_stall_cycles)) begin
+              mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+              state_next        = eDEC_STALL_CYCLE;
+              instr_issued      = 1'b0;
+            end else if (is_div && (dec_counter < XLEN)) begin
+              mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+              state_next        = eDEC_STALL_CYCLE;
+              instr_issued      = 1'b0;
+            end else begin
+              mul_sel           = f3_7_to_mul_rr_op(f3_mul_e'(funct3), f7_mul_e'(funct7), illegal_instr);
+              regdest2          = regdest;
+              instr_will_retire = 1'b1;
+              mul_write_rf      = 1'b1;
+            end
+          end
+	        default:;
+	      endcase
+      end else
         illegal_instr = 1'b1;
-      end
     end
 
     OPCODE_LUI: begin
