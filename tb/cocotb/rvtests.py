@@ -1423,14 +1423,14 @@ class DIVTest(Program):
     def __init__(self):
         insns = [
             InstructionADDI(x1, x0, 9),
-            InstructionADDI(x2, x0, -3),
+            InstructionADDI(x2, x0, 3),
             InstructionDIV(x1, x1, x2),
             InstructionADDI(x31, x0, 1)
         ]
         super().__init__(insns)
 
     def expects(self) -> dict:
-        return {x1: -3}
+        return {x1: 3}
 
 class DIVUTest(Program):
     """Basic test of DIVU instruction"""
