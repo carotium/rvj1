@@ -29,7 +29,7 @@ module rvj1_mul_div import rvj1_pkg::*; (
   } div_fsm_e;
   div_fsm_e div_state, div_state_n;
 
-  // Multiplication
+  /******* Multiplication *******/
   logic [15:0]   op_a_H, op_a_L, op_b_H, op_b_L;
   logic [16:0]   op_a_H_ext, op_a_L_ext, op_b_H_ext, op_b_L_ext;
 
@@ -38,8 +38,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
 
-  logic [XLEN*2+1:0] booth_res_acc;
-  logic [XLEN*2+1:0] booth_res_acc_n;
+  logic [XLEN*2:0] booth_res_acc;
+  logic [XLEN*2:0] booth_res_acc_n;
+
   logic [XLEN*2-1:0] res_mul;
   logic is_mul;
   logic is_mul_lower;
@@ -47,32 +48,28 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic is_mul_a_signed;
   logic is_mul_b_signed;
 
-  // Division
-  logic [XLEN-1:0] res_rem, res_div, res_mux;
-  logic [XLEN-1:0] op_b;  // Copy of divisor
+  /******* Division *******/
   logic [COUNT_WIDTH-1:0] div_counter;
   logic [XLEN-1:0]        quo, quo_n;
-  // Add one bit for overflow correction for REMU
-  logic [XLEN:0]        acc, acc_n;
+  logic [XLEN:0]          acc, acc_n;
   logic                   a_sign, b_sign, sign_diff;
-  logic [XLEN-1:0]        au, bu;  // unsigned versions of operands
-  logic done, busy;
+  logic [XLEN-1:0]        au, bu;                     // Unsigned operands
   logic dbz;
   logic signed_operation;
-  logic is_div;
-  logic is_div_div; // DIV ali LOWER
-  logic is_div_rem; // REM ali UPPER
-  // {acc, quo} = {REM, DIV}
 
-  assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
-  assign is_div_rem = (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU);
-  assign is_div = (is_div_div || is_div_rem);
+  logic is_div;
+  logic is_div_div;
+  logic is_div_rem;
 
   assign is_mul_lower = (sel_i == MUL_OP_MUL);
   assign is_mul_upper = (sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHU || sel_i == MUL_OP_MULHSU);
   assign is_mul_a_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU);
   assign is_mul_b_signed = (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH);
   assign is_mul = (is_mul_lower || is_mul_upper);
+
+  assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
+  assign is_div_rem = (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU);
+  assign is_div = (is_div_div || is_div_rem);
 
   assign op_a_H = op_a_i[XLEN-1:16];
   assign op_a_L = op_a_i[15:0];
@@ -166,64 +163,47 @@ module rvj1_mul_div import rvj1_pkg::*; (
 //	                   (signed_operation)              ?  {acc, quo} : '0;
 
   always_comb begin
-    // inicializacija vse na '0
     unique case(div_state)
       eDIV_IDLE: begin
-	res_div = '0;
-	res_rem = '0;
-	dbz     = 1'b0;
-	div_state_n = eDIV_IDLE;
-	if (mul_div_en_i && (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU || sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)) begin
-	  div_state_n = eDIV_CALC;
-	  //div_counter = 0; //clear div_counter
-	  if (op_b_i == '0) begin // Division by zero
-	    div_state_n = eDIV_DBZ;
-	    dbz = 1'b1;
-          end else begin
-
-	    {acc_n, quo_n} = {{(XLEN){1'b0}}, au, 1'b0};
-	  end
-	end
+        dbz     = 1'b0;
+        div_state_n = eDIV_IDLE;
+        if (mul_div_en_i && (is_div)) begin
+          div_state_n = eDIV_CALC;
+          if (op_b_i == '0) begin     // Division by zero
+            div_state_n = eDIV_DBZ;
+            dbz = 1'b1;
+          end else {acc_n, quo_n} = {{(XLEN){1'b0}}, au, 1'b0};
+        end
       end
       eDIV_CALC: begin
         if (div_counter <= XLEN - 1) begin
-//	  div_counter = div_counter + 1; // increment div_counter
           if (acc >= bu) begin
-	    acc_n = acc - bu;
-	    {acc_n, quo_n} = {acc_n[XLEN-1:0], quo, 1'b1};
-	  end else begin
-		  // Preveri tukaj ce rabim dodatni bit
-//	    if (div_counter < XLEN - 1)
-	      {acc_n, quo_n} = {acc, quo} << 1;
-	  end
-	  if (div_counter == XLEN - 1) begin
-	    div_state_n = eDIV_DONE;
-	  end
+	          acc_n = acc - bu;
+	          {acc_n, quo_n} = {acc_n[XLEN-1:0], quo, 1'b1};
+      	  end else {acc_n, quo_n} = {acc, quo} << 1;
+	        if (div_counter == XLEN - 1) div_state_n = eDIV_DONE;
         end
-//	  if (quo != '0) begin
-//            
-//	    res_div = (sign_diff) ? -quo : quo;
-//	    res_rem = (a_sign) ? -{1'b0, acc[XLEN-1:1]} : {1'b0, acc[XLEN-1:1]};
-//	  end else begin
-//            res_div = quo;
-//	    res_rem = (a_sign) ? -acc : acc;
-//          end
       end
       eDIV_DBZ: begin
-	if (div_counter == XLEN - 1)
-	  div_state_n = eDIV_DONE;
+	      if (div_counter == XLEN - 1) div_state_n = eDIV_DONE;
       end
       eDIV_DONE: begin
-	div_state_n = eDIV_IDLE;
+	      div_state_n = eDIV_IDLE;
       end
       default:;
     endcase
   end
 
-  always_ff @(posedge clk_i) begin
-    acc <= acc_n;
-    quo <= quo_n;
-  end
+  assign booth_res_acc_n = (is_mul) ? booth_res_acc + (booth_pp_acc << booth_shift) : {acc_n, quo_n};
+
+  assign res_o =  (is_div_div && dbz)                                     ?  '1                     :
+	                (sel_i == MUL_OP_DIV && sign_diff)                      ? -booth_res_acc_n[31:0]  :
+	  	            (is_div_div)           ?  booth_res_acc_n[31:0]  :
+		              (is_div_rem && dbz)  ?  op_a_i                 :
+	                (sel_i == MUL_OP_REM && a_sign)                         ? -booth_res_acc_n[64:33] :
+	                (is_div_rem)                                            ?  booth_res_acc_n[64:33] :
+		              (is_mul_lower)                                          ?  booth_res_acc_n[31:0]  :
+		              (is_mul_upper)                                          ? booth_res_acc_n[63:32]  : '0;
 
   cntr #(
     .WORD_WIDTH($clog2(XLEN)),
@@ -237,6 +217,28 @@ module rvj1_mul_div import rvj1_pkg::*; (
   );
 
   register #(
+    .DTYPE(logic [XLEN-1:0]),
+    .RESET_VALUE(0)
+  ) quo_inst (
+    .clk  (clk_i),
+    .rstn (rstn_i),
+    .ce   (1'b1),
+    .in   (quo_n),
+    .out  (quo)
+  );
+
+  register #(
+    .DTYPE(logic [XLEN:0]),
+    .RESET_VALUE(0)
+  ) acc_inst (
+    .clk  (clk_i),
+    .rstn (rstn_i),
+    .ce   (1'b1),
+    .in   (acc_n),
+    .out  (acc)
+  );
+
+  register #(
     .DTYPE(div_fsm_e),
     .RESET_VALUE(eDIV_IDLE)
   ) div_state_inst (
@@ -246,108 +248,6 @@ module rvj1_mul_div import rvj1_pkg::*; (
     .in   (div_state_n),
     .out  (div_state)
   );
-
-//  always_comb begin
-//    if (acc >= {1'b0, bu}) begin
-//      acc_n = acc - bu;
-//      {acc_n, quo_n} = {acc_n[XLEN-2:0], quo, 1'b1};
-//    end else begin
-//      {acc_n, quo_n} = {acc, quo} << 1;
-//    end
-//  end
-
-//  always_ff @(posedge clk_i) begin
-//    if (~rstn_i) begin
-//      busy <= 1'b0;
-//      done <= 1'b0;
-//      res_div <= '0;
-//      res_rem <= '0;
-//      dbz <= 1'b0;
-//    end else if (mul_div_en_i && (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU || sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)) begin
-//      div_counter <= 0; // clear div_counter
-//      if (op_b_i == 0) begin // Division by zero
-//	busy <= 1'b0;
-//	done <= 1'b1;
-//	dbz <= 1'b1;
-//      end else begin
-//	done <= 1'b0;
-//	busy <= 1'b1;
-//	dbz <= 1'b0;
-//	res_rem <= '0;
-//	res_div <= '0;
-//	sign_diff <= (a_sign ^ b_sign);
-//	{acc, quo} <= {{(XLEN-1){1'b0}}, au, 1'b0}; // init
-//      end
-//    end else if (busy) begin
-//      if (div_counter == XLEN - 1) begin
-//        busy <= 1'b0;
-//        done <= 1'b1;
-//	if (quo_n != '0) begin
-//	  res_div <= (sign_diff) ? -quo_n : quo_n;
-//	  res_rem <= (a_sign) ? -{1'b0, acc_n[XLEN-1:1]} : {1'b0, acc_n[XLEN-1:1]};
-//	end else begin
-//	  res_div <= quo_n;
-//          res_rem <= (a_sign) ? -acc : acc; // undo final shift
-//	end
-//      end else begin
-//        div_counter <= div_counter + 1;
-//        acc <= acc_n;
-//        quo <= quo_n;
-//      end
-//    end
-//  end    
-
-  always_comb begin
-    booth_res_acc_n = '0;
-
-    if (sel_i == MUL_OP_MUL || sel_i == MUL_OP_MULH || sel_i == MUL_OP_MULHSU || sel_i == MUL_OP_MULHU)
-      booth_res_acc_n = booth_res_acc + (booth_pp_acc << booth_shift);
-    else
-//      booth_res_acc_n = {acc, quo};
-      booth_res_acc_n = {acc_n, quo_n};
-  end
-  // pogoj kot signal use_upper_reg
-//  assign res_o = (sel_i == MUL_OP_DIV && sign_diff)            ? -booth_res_acc_n[31:0]  :
-//	         (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU) ?  booth_res_acc_n[31:0]  :
-//		 (sel_i == MUL_OP_REM && a_sign)               ? -booth_res_acc[64:32] :
-//		 (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU) ?  booth_res_acc[64:32] :
-//		 (is_mul)                                      ?  booth_res_acc_n[64:32] : '0;
-
-// Popravi potem tukaj
-  assign res_o = ((sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU) && dbz)                    ?  '1                             :
-	         (sel_i == MUL_OP_DIV && sign_diff)                                        ? -booth_res_acc_n[31:0]          :
-	  	 (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU)                             ?  booth_res_acc_n[31:0]          :
-		 ((sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU) && dbz)                    ?  op_a_i                         :
-	         (sel_i == MUL_OP_REM && a_sign)                                           ? -booth_res_acc_n[65:33] :
-	         (sel_i == MUL_OP_REM || sel_i == MUL_OP_REMU)                             ?  booth_res_acc_n[65:33] :
-		 (is_mul_lower)                                                     ?  booth_res_acc_n[31:0]          :
-		 (is_mul_upper) ? booth_res_acc_n[64:32] : '0;
-
-  // Output assignment
-//  always_comb begin
-//    unique case (sel_i)
-//      MUL_OP_MUL: begin
-//        res_o = res_mul[XLEN-1:0];
-//      end
-//      MUL_OP_MULH, MUL_OP_MULHSU, MUL_OP_MULHU: begin
-//	res_o = res_mul[XLEN*2-1:XLEN];
-//      end
-//      MUL_OP_DIV, MUL_OP_DIVU: begin
-//	if (dbz) begin
-//          res_o = '1;
-//	end else begin
-//          res_o = res_div;
-//	end
-//      end
-//      MUL_OP_REM, MUL_OP_REMU: begin
-//        if (dbz) begin
-//          res_o = op_a_i;
-//	end else begin
-//	  res_o = res_rem;
-//	end
-//      end
-//    endcase
-//  end
 
   register #(
     .DTYPE(booth_fsm_e),
