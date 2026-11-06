@@ -40,7 +40,6 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
 
-  logic [XLEN*2:0] res_acc_mul;
   logic [XLEN*2:0] res_acc_mul_n;
 
   logic is_mul;
@@ -54,7 +53,6 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic                   a_sign, b_sign, sign_diff;
   logic [XLEN-1:0]        au, bu; // Unsigned operands
 
-  logic [XLEN*2:0] res_acc_div;
   logic [XLEN*2:0] res_acc_div_n;
 
   logic dbz;
