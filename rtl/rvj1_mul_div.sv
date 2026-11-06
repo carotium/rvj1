@@ -40,6 +40,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [XLEN*2-1:0] booth_pp_acc;
   logic [6:0] booth_shift;
 
+  logic [XLEN*2:0] res_acc_mul;
+  logic [XLEN*2:0] res_acc_mul_n;
+
   logic is_mul;
   logic is_mul_lower;
   logic is_mul_upper;
@@ -50,6 +53,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
   logic [COUNT_WIDTH-1:0] div_counter;
   logic                   a_sign, b_sign, sign_diff;
   logic [XLEN-1:0]        au, bu; // Unsigned operands
+
+  logic [XLEN*2:0] res_acc_div;
+  logic [XLEN*2:0] res_acc_div_n;
 
   logic dbz;
   logic is_div_signed;
@@ -83,7 +89,6 @@ module rvj1_mul_div import rvj1_pkg::*; (
     booth_mul_a = '0;
     booth_mul_b = '0;
     booth_shift = '0;
-    if (is_mul) res_acc_n   = '0;
 
     unique case(booth_state)
       eBOOTH_IDLE: begin
@@ -126,10 +131,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
       	booth_state_n = eBOOTH_IDLE;
       end
     endcase
-
-    if (is_mul && booth_state != eBOOTH_IDLE) res_acc_n = (res_acc + (booth_pp_acc << booth_shift));
-
   end
+
+  assign res_acc_mul_n = (booth_state != eBOOTH_IDLE) ? (res_acc + (booth_pp_acc << booth_shift)) : '0;
 
   booth_core_half #(.XLEN(XLEN)) booth_mult (
     .op_a_ext(booth_mul_a),
@@ -154,22 +158,22 @@ module rvj1_mul_div import rvj1_pkg::*; (
 
   always_comb begin
     div_state_n = eDIV_IDLE;
-    res_acc_n = '0;
+    res_acc_div_n = '0;
     unique case(div_state)
       eDIV_IDLE: begin
         div_state_n = eDIV_IDLE;
         if (mul_div_en_i && is_div) begin
           div_state_n = (op_b_i == '0) ? eDIV_DBZ : eDIV_CALC;
-          res_acc_n = {{(XLEN){1'b0}}, au, 1'b0};
-        end else res_acc_n = res_acc;
+          res_acc_div_n = {{(XLEN){1'b0}}, au, 1'b0};
+        end else res_acc_div_n = res_acc;
       end
       eDIV_CALC: begin
         if (div_counter <= (XLEN - 1)) begin
           div_state_n = (div_counter == XLEN - 1) ? eDIV_IDLE : eDIV_CALC;
           if (res_acc[64:32] >= bu) begin
-	          res_acc_n[64:32] = res_acc[64:32] - bu;
-	          res_acc_n = {res_acc_n[63:32], res_acc[31:0], 1'b1};
-          end else res_acc_n = res_acc << 1;
+	          res_acc_div_n[64:32] = res_acc[64:32] - bu;
+	          res_acc_div_n        = {res_acc_div_n[63:32], res_acc[31:0], 1'b1};
+          end else res_acc_div_n = res_acc << 1;
         end
       end
       eDIV_DBZ: begin
@@ -178,6 +182,9 @@ module rvj1_mul_div import rvj1_pkg::*; (
       default:;
     endcase
   end
+
+  assign res_acc_n = (is_mul) ? res_acc_mul_n :
+                     (is_div) ? res_acc_div_n : '0;
 
   assign res_o =  (div_state == eDIV_IDLE || booth_state == eBOOTH_DONE)  ?
                   ((is_div_div && dbz)                ?  '1               :
