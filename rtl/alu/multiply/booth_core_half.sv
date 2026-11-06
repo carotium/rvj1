@@ -1,6 +1,6 @@
 module booth_core_half #(parameter int XLEN = 32) (
-  input  logic signed [16:0] op_a_ext,
-  input  logic signed [16:0] op_b_ext,
+  input  logic [16:0] op_a_ext,
+  input  logic [16:0] op_b_ext,
   output logic [XLEN*2-1:0]    pp [8:0]
 );
 
@@ -13,8 +13,9 @@ module booth_core_half #(parameter int XLEN = 32) (
   logic [2*XLEN-1:0] neg_two_a;
   logic [2*XLEN-1:0] two_a;
 
-  assign neg_a = (~op_a_XLEN_sign_ext) + 1;
-  assign neg_two_a = ~(op_a_XLEN_sign_ext << 1) + 1;
+  assign neg_a = -op_a_XLEN_sign_ext;
+  assign neg_two_a = -(op_a_XLEN_sign_ext << 1);
+
   assign two_a = op_a_XLEN_sign_ext << 1;
 
   assign op_a_XLEN_sign_ext = (op_a_ext[16]) ? {{(2*XLEN - 17){1'b1}}, op_a_ext} : {{(2*XLEN - 17){1'b0}}, op_a_ext};
@@ -51,4 +52,5 @@ module booth_core_half #(parameter int XLEN = 32) (
   endgenerate
 
   assign pp = pps;
+
 endmodule
