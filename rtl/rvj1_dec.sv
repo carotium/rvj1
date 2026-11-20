@@ -513,6 +513,9 @@ begin
   dret_insn         = 1'b0;
   regdest2          = 5'b0;
   illegal_instr     = 1'b0;
+  is_mul = 1'b0;
+  is_mul_h = 1'b0;
+  is_div = 1'b0;
   unique case (opcode)
     OPCODE_OPIMM: begin
       if (f3_f7_valid_opimm(funct3, funct7)) begin
