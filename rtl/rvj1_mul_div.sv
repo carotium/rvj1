@@ -87,6 +87,7 @@ module rvj1_mul_div import rvj1_pkg::*; (
     booth_mul_a = '0;
     booth_mul_b = '0;
     booth_shift = '0;
+    booth_state_n = eBOOTH_IDLE;
 
     unique case(booth_state)
       eBOOTH_IDLE: begin
@@ -140,7 +141,7 @@ module rvj1_mul_div import rvj1_pkg::*; (
   );
 
   /******* Division *******/
-  assign dbz = (op_b_i == '0);
+  assign dbz = (op_b_i == '0  && is_div);
 
   assign is_div_signed = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_REM);
   assign is_div_div = (sel_i == MUL_OP_DIV || sel_i == MUL_OP_DIVU);
